@@ -49,24 +49,27 @@ export function extractText(response: unknown): string {
   const candidates = response.candidates;
   if (!Array.isArray(candidates) || candidates.length === 0) return "";
 
-  const firstCandidate = candidates[0];
-  if (!isRecord(firstCandidate)) return "";
+  for (const candidate of candidates) {
+    if (!isRecord(candidate)) continue;
+    const content = candidate.content;
+    if (!isRecord(content)) continue;
+    const parts = content.parts;
+    if (!Array.isArray(parts)) continue;
 
-  const content = firstCandidate.content;
-  if (!isRecord(content)) return "";
+    const text = parts
+      .map((part: unknown) => {
+        if (isRecord(part) && typeof part.text === "string") {
+          return part.text;
+        }
+        return "";
+      })
+      .filter((text: string) => text.length > 0)
+      .join("");
 
-  const parts = content.parts;
-  if (!Array.isArray(parts)) return "";
+    if (text) return text;
+  }
 
-  return parts
-    .map((part: unknown) => {
-      if (isRecord(part) && typeof part.text === "string") {
-        return part.text;
-      }
-      return "";
-    })
-    .filter((text: string) => text.length > 0)
-    .join("");
+  return "";
 }
 
 export function extractUsage(response: unknown): GeminiUsage {
@@ -97,4 +100,36 @@ export function extractUsage(response: unknown): GeminiUsage {
     candidatesTokens: Number.isFinite(candidates) ? candidates : 0,
     totalTokens: Number.isFinite(total) ? total : 0,
   };
+}
+
+export function extractPromptBlockReason(response: unknown): string | undefined {
+  if (!isRecord(response)) return undefined;
+  const promptFeedback = response.promptFeedback;
+  if (!isRecord(promptFeedback)) return undefined;
+
+  const blockReason =
+    typeof promptFeedback.blockReason === "string"
+      ? promptFeedback.blockReason
+      : undefined;
+  const blockReasonMessage =
+    typeof promptFeedback.blockReasonMessage === "string"
+      ? promptFeedback.blockReasonMessage
+      : undefined;
+
+  if (blockReason && blockReasonMessage) {
+    return `${blockReason}: ${blockReasonMessage}`;
+  }
+  return blockReason ?? blockReasonMessage;
+}
+
+export function extractFirstCandidateFinishReason(
+  response: unknown,
+): string | undefined {
+  if (!isRecord(response)) return undefined;
+  const candidates = response.candidates;
+  if (!Array.isArray(candidates) || candidates.length === 0) return undefined;
+  const firstCandidate = candidates[0];
+  if (!isRecord(firstCandidate)) return undefined;
+  const finishReason = firstCandidate.finishReason;
+  return typeof finishReason === "string" ? finishReason : undefined;
 }

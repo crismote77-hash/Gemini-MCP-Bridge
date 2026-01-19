@@ -54,7 +54,7 @@ src/
 1. MCP client calls a tool (e.g., `gemini_generate_text`).
 2. Tool validates inputs and enforces rate limits and budgets.
 3. Tool builds a Gemini API request (generateContent/countTokens/listModels/embedContent; Vertex embeddings use predict).
-4. Response is parsed and returned as MCP text blocks with a usage footer.
+4. Response is parsed and returned as MCP text blocks with a usage footer (if the model returns no text, tools surface block/finish reasons and can include raw response in debug mode).
 
 ### Conversation Memory
 

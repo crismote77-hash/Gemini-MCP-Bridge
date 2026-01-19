@@ -50,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `gemini_embed_text` now uses Vertex `predict` when `GEMINI_MCP_BACKEND=vertex` (previously failed with embedContent unsupported errors).
 - Gemini client now surfaces clearer errors when the API returns non-JSON responses (instead of JSON parse exceptions).
+- `gemini_generate_text` and `gemini_analyze_image` now return a clear error (with `blockReason` / `finishReason`) when the API returns no text, instead of returning an empty string.
+- Tool errors now surface safe underlying error messages (redacted) for easier debugging (e.g. image URL fetch failures).
 - Redis connection hangs indefinitely if server is unavailable (now times out after 10s)
 - HTTP server shows cryptic errors for port conflicts (now shows user-friendly messages for EADDRINUSE, EACCES, EADDRNOTAVAIL)
 - Conversation trimming infinite loop when single message exceeds `maxTotalChars` (now truncates oversized messages)

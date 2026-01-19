@@ -109,6 +109,14 @@ export function formatToolError(error: unknown): ToolErrorInfo {
   }
 
   if (error instanceof Error) {
+    const message = redactString((error.message || "").trim());
+    if (message) {
+      const maxLen = 500;
+      return {
+        message:
+          message.length > maxLen ? `${message.slice(0, maxLen)}…` : message,
+      };
+    }
     return { message: "Unexpected error. Check server logs for details." };
   }
 

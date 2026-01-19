@@ -64,3 +64,7 @@ Start using `npm run runbook:note -- "..."` to append entries.
 
 - Fix Vertex embeddings (gemini_embed_text uses predict) + clearer non-JSON API errors; verified: npm run build, npm test; next: re-test MCP tools in Claude/Codex
 
+## 2026-01-19T20:01:19Z
+
+- Fix empty outputs: generate_text/analyze_image now error with block/finish reasons when no text; tool errors surface redacted messages; verified: npm run build, npm test; next: re-test gemini_generate_text + gemini_analyze_image in Claude
+

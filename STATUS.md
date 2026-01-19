@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated (UTC): 2026-01-19T19:38:19Z
+Last updated (UTC): 2026-01-19T20:01:04Z
 
 ## In Progress
 
@@ -27,10 +27,12 @@ Last updated (UTC): 2026-01-19T19:38:19Z
 - Ignore .serena metadata in git and remove tracked files
 - Fix `gemini_embed_text` for Vertex backend (use Vertex embedding API).
 - Improve non-JSON Gemini API error handling (avoid confusing JSON parse errors).
+- Improve `gemini_generate_text` handling when no text is returned (surface block/finish reasons instead of empty output).
+- Improve `gemini_analyze_image` error messages (surface safe underlying errors like image fetch failures).
 
 ## Verification Snapshot
 
-Last verified (UTC): 2026-01-19T19:38:19Z
+Last verified (UTC): 2026-01-19T20:01:04Z
 
 - npm run build
 - npm test

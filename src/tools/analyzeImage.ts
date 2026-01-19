@@ -6,7 +6,12 @@ import { RateLimiter } from "../limits/rateLimiter.js";
 import { DailyTokenBudget } from "../limits/dailyTokenBudget.js";
 import { textBlock } from "../utils/textBlock.js";
 import { formatUsageFooter } from "../utils/usageFooter.js";
-import { extractText, extractUsage } from "../utils/geminiResponses.js";
+import {
+  extractFirstCandidateFinishReason,
+  extractPromptBlockReason,
+  extractText,
+  extractUsage,
+} from "../utils/geminiResponses.js";
 import {
   type ToolDependencies,
   validateInputSize,
@@ -204,6 +209,8 @@ export function createAnalyzeImageHandler(deps: Dependencies) {
             requestBody,
           );
           const text = extractText(response);
+          const finishReason = extractFirstCandidateFinishReason(response);
+          const blockReason = extractPromptBlockReason(response);
           const usage = extractUsage(response);
           const requestTokens = usage.totalTokens || estimatedInputTokens;
 
@@ -217,6 +224,27 @@ export function createAnalyzeImageHandler(deps: Dependencies) {
           const usageSummary = await deps.dailyBudget.getUsage();
           const usageFooter = formatUsageFooter(requestTokens, usageSummary);
           const warnings = takeAuthFallbackWarnings(client);
+          if (!text.trim()) {
+            const diagnostics = [
+              finishReason ? `finishReason=${finishReason}` : undefined,
+              blockReason ? `blockReason=${blockReason}` : undefined,
+            ]
+              .filter(Boolean)
+              .join(", ");
+            const debug =
+              deps.config.logging.debug && response
+                ? `\n\nRaw response:\n${JSON.stringify(response, null, 2)}`
+                : "";
+            return {
+              isError: true,
+              content: [
+                textBlock(
+                  `No text returned by model.${diagnostics ? ` (${diagnostics})` : ""}${debug}\n\n${usageFooter}`,
+                ),
+                ...warnings,
+              ],
+            };
+          }
           return {
             content: [textBlock(`${text}\n\n${usageFooter}`), ...warnings],
           };

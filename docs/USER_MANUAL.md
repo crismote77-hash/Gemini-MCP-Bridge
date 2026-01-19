@@ -172,6 +172,14 @@ args = ["--stdio"]
 
 ---
 
+## Troubleshooting
+
+- If `gemini_generate_text` or `gemini_analyze_image` returns “No text returned by model”, check the reported `blockReason` / `finishReason` and try a different prompt or model.
+- If `gemini_analyze_image` fails to fetch an `imageUrl` (e.g. 403/404), download the image and pass `imageBase64` + `mimeType` instead.
+- Set `GEMINI_MCP_DEBUG=1` to include raw API responses in some error outputs (secrets are redacted).
+
+---
+
 ## Configuration
 
 ### Config file
