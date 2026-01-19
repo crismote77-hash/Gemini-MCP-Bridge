@@ -61,6 +61,7 @@ src/
 - `gemini_embed_text`: text + optional model.
 - `gemini_count_tokens`: text + optional model.
 - `gemini_list_models`: limit + pageToken; optional filter returns curated metadata and API call falls back to curated list on failure.
+  - Curated metadata is refreshed daily (cached on disk) when API credentials are available.
 - `gemini_get_help`: topic (overview/tools/models/parameters/examples/quick-start).
 
 ## Prompts

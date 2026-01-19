@@ -86,6 +86,7 @@ args = ["--stdio"]
 - Image analysis: `Use gemini_analyze_image with prompt "..." and imageUrl "..."`
 - Embeddings: `Use gemini_embed_text with text "..."`
 - Model list: `Use gemini_list_models` (optional filter: `all|thinking|vision|grounding|json_mode`)
+  - Curated metadata auto-refreshes daily when API credentials are available.
 - Token count: `Use gemini_count_tokens`
 
 ---
@@ -110,6 +111,7 @@ args = ["--stdio"]
 - `gemini_embed_text`: text embeddings.
 - `gemini_count_tokens`: token counting via API.
 - `gemini_list_models`: list available models (optional filter: `all|thinking|vision|grounding|json_mode` for curated metadata).
+  - Curated metadata is cached under `~/.gemini-mcp-bridge/curated-models.json`.
 - `gemini_get_help`: built-in help topics.
 
 ## Prompts

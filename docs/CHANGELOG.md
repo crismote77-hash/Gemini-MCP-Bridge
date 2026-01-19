@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - OAuth/ADC authentication with auth mode selection (oauth/apiKey/auto)
 - MCP prompts: code_review, explain_with_thinking, creative_writing
 - Curated Gemini model metadata for filtered listings
+- Daily auto-refresh for curated Gemini model metadata cache
 - Rate limiter + daily token budget (optional shared Redis)
 - Tools: gemini_generate_text, gemini_analyze_image, gemini_embed_text, gemini_count_tokens, gemini_list_models, gemini_get_help
 - Resources: usage://stats, conversation://current, gemini://capabilities, gemini://models, gemini://help/*

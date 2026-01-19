@@ -7,6 +7,7 @@ import { registerTools } from "./tools/index.js";
 import { registerResources } from "./resources/index.js";
 import { ConversationStore } from "./services/conversationStore.js";
 import { registerPrompts } from "./prompts/index.js";
+import { startCuratedModelsAutoRefresh } from "./models/curatedModels.js";
 
 export type SharedDependencies = {
   config: BridgeConfig;
@@ -24,6 +25,7 @@ export function createMcpServer(
   info: { name: string; version: string },
 ): McpServer {
   const server = new McpServer({ name: info.name, version: info.version });
+  startCuratedModelsAutoRefresh({ config: deps.config, logger: deps.logger });
   registerTools(server, deps);
   registerPrompts(server);
   registerResources(server, {
