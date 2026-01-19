@@ -5,6 +5,11 @@ import type { Logger } from "../logger.js";
 import { resolveGeminiAuth } from "../auth/resolveAuth.js";
 import { GeminiClient } from "../services/geminiClient.js";
 import { expandHome } from "../utils/paths.js";
+import {
+  isRecord,
+  toTrimmedString,
+  toFiniteNumber,
+} from "../utils/typeGuards.js";
 
 export type CuratedModelFeature =
   | "thinking"
@@ -14,7 +19,12 @@ export type CuratedModelFeature =
   | "system_instructions"
   | "function_calling";
 
-export type CuratedModelFilter = "all" | "thinking" | "vision" | "grounding" | "json_mode";
+export type CuratedModelFilter =
+  | "all"
+  | "thinking"
+  | "vision"
+  | "grounding"
+  | "json_mode";
 
 export type CuratedModel = {
   name: string;
@@ -28,29 +38,61 @@ export const CURATED_GEMINI_MODELS: Record<string, CuratedModel> = {
   "gemini-2.5-pro": {
     name: "gemini-2.5-pro",
     description: "High-accuracy Gemini model optimized for complex reasoning.",
-    features: ["thinking", "vision", "grounding", "json_mode", "system_instructions", "function_calling"],
+    features: [
+      "thinking",
+      "vision",
+      "grounding",
+      "json_mode",
+      "system_instructions",
+      "function_calling",
+    ],
     thinking: "supported",
   },
   "gemini-2.5-flash": {
     name: "gemini-2.5-flash",
     description: "Fast, multimodal Gemini model for low-latency tasks.",
-    features: ["thinking", "vision", "grounding", "json_mode", "system_instructions", "function_calling"],
+    features: [
+      "thinking",
+      "vision",
+      "grounding",
+      "json_mode",
+      "system_instructions",
+      "function_calling",
+    ],
     thinking: "supported",
   },
   "gemini-2.5-flash-lite": {
     name: "gemini-2.5-flash-lite",
     description: "Lightweight Gemini model tuned for speed and cost.",
-    features: ["vision", "grounding", "json_mode", "system_instructions", "function_calling"],
+    features: [
+      "vision",
+      "grounding",
+      "json_mode",
+      "system_instructions",
+      "function_calling",
+    ],
   },
   "gemini-2.0-flash": {
     name: "gemini-2.0-flash",
     description: "Balanced Gemini model for everyday multimodal workloads.",
-    features: ["vision", "grounding", "json_mode", "system_instructions", "function_calling"],
+    features: [
+      "vision",
+      "grounding",
+      "json_mode",
+      "system_instructions",
+      "function_calling",
+    ],
   },
   "gemini-1.5-pro": {
     name: "gemini-1.5-pro",
     description: "Stable Gemini model with strong general-purpose performance.",
-    features: ["vision", "grounding", "json_mode", "system_instructions", "function_calling"],
+    features: [
+      "vision",
+      "grounding",
+      "json_mode",
+      "system_instructions",
+      "function_calling",
+    ],
   },
 };
 
@@ -73,23 +115,6 @@ let cachedSnapshot: CuratedModelsSnapshot | null = null;
 let refreshTimer: NodeJS.Timeout | null = null;
 let refreshInFlight: Promise<void> | null = null;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function toStringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function toNumberValue(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return undefined;
-}
-
 function normalizeModelName(raw: string): string {
   return raw.startsWith("models/") ? raw.slice("models/".length) : raw;
 }
@@ -100,7 +125,12 @@ function readCacheFromDisk(): CuratedModelsSnapshot | null {
   try {
     const raw = fs.readFileSync(resolved, "utf-8");
     const parsed = JSON.parse(raw) as CuratedModelsCache;
-    if (!parsed || !Array.isArray(parsed.models) || typeof parsed.updatedAt !== "string") return null;
+    if (
+      !parsed ||
+      !Array.isArray(parsed.models) ||
+      typeof parsed.updatedAt !== "string"
+    )
+      return null;
     const updatedAtMs = Date.parse(parsed.updatedAt);
     if (!Number.isFinite(updatedAtMs)) return null;
     const models = parsed.models.filter((model): model is CuratedModel => {
@@ -122,7 +152,10 @@ function writeCacheToDisk(models: CuratedModel[], updatedAtMs: number): void {
   const resolved = expandHome(CACHE_PATH);
   const dir = path.dirname(resolved);
   fs.mkdirSync(dir, { recursive: true });
-  const payload: CuratedModelsCache = { updatedAt: new Date(updatedAtMs).toISOString(), models };
+  const payload: CuratedModelsCache = {
+    updatedAt: new Date(updatedAtMs).toISOString(),
+    models,
+  };
   fs.writeFileSync(resolved, JSON.stringify(payload, null, 2));
 }
 
@@ -136,18 +169,28 @@ function isSnapshotFresh(snapshot: CuratedModelsSnapshot | null): boolean {
   return Date.now() - snapshot.updatedAtMs < REFRESH_INTERVAL_MS;
 }
 
-function listModelsFromSnapshot(filter: CuratedModelFilter, snapshot: CuratedModelsSnapshot | null): CuratedModel[] {
-  const models = snapshot?.models?.length ? snapshot.models : Object.values(CURATED_GEMINI_MODELS);
+function listModelsFromSnapshot(
+  filter: CuratedModelFilter,
+  snapshot: CuratedModelsSnapshot | null,
+): CuratedModel[] {
+  const models = snapshot?.models?.length
+    ? snapshot.models
+    : Object.values(CURATED_GEMINI_MODELS);
   if (filter === "all") return models;
   return models.filter((model) => model.features.includes(filter));
 }
 
 type ApiModel = Record<string, unknown>;
 
-function parseModelListResponse(response: unknown): { models: ApiModel[]; nextPageToken?: string } {
+function parseModelListResponse(response: unknown): {
+  models: ApiModel[];
+  nextPageToken?: string;
+} {
   if (!isRecord(response)) return { models: [] };
-  const models = Array.isArray(response.models) ? response.models.filter(isRecord) : [];
-  const nextPageToken = toStringValue(response.nextPageToken);
+  const models = Array.isArray(response.models)
+    ? response.models.filter(isRecord)
+    : [];
+  const nextPageToken = toTrimmedString(response.nextPageToken);
   return { models: models as ApiModel[], nextPageToken };
 }
 
@@ -157,14 +200,18 @@ function buildCuratedModelsFromApi(models: ApiModel[]): CuratedModel[] {
   const out = new Map<string, CuratedModel>();
 
   for (const model of models) {
-    const rawName = toStringValue(model.name);
+    const rawName = toTrimmedString(model.name);
     if (!rawName) continue;
     const name = normalizeModelName(rawName);
     const base = baseByName.get(name);
     const description =
-      toStringValue(model.description) ?? toStringValue(model.displayName) ?? base?.description ?? "Gemini model.";
+      toTrimmedString(model.description) ??
+      toTrimmedString(model.displayName) ??
+      base?.description ??
+      "Gemini model.";
     const features = base?.features ?? [];
-    const contextWindow = toNumberValue(model.inputTokenLimit) ?? base?.contextWindow;
+    const contextWindow =
+      toFiniteNumber(model.inputTokenLimit) ?? base?.contextWindow;
     const thinking = base?.thinking;
 
     const curated: CuratedModel = {
@@ -185,7 +232,10 @@ async function fetchAllApiModels(client: GeminiClient): Promise<ApiModel[]> {
   let pageToken: string | undefined;
 
   for (let i = 0; i < MAX_PAGES; i += 1) {
-    const response = await client.listModels<unknown>({ pageSize: MAX_PAGE_SIZE, pageToken });
+    const response = await client.listModels<unknown>({
+      pageSize: MAX_PAGE_SIZE,
+      pageToken,
+    });
     const parsed = parseModelListResponse(response);
     models.push(...parsed.models);
     if (!parsed.nextPageToken) break;
@@ -195,22 +245,53 @@ async function fetchAllApiModels(client: GeminiClient): Promise<ApiModel[]> {
   return models;
 }
 
-export async function refreshCuratedGeminiModels(deps: { config: BridgeConfig; logger: Logger }): Promise<void> {
+export async function refreshCuratedGeminiModels(deps: {
+  config: BridgeConfig;
+  logger: Logger;
+}): Promise<void> {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
-    const auth = await resolveGeminiAuth({
+    const authOpts = {
       mode: deps.config.auth.mode,
       apiKey: deps.config.auth.apiKey,
       apiKeyEnvVar: deps.config.auth.apiKeyEnvVar,
       apiKeyEnvVarAlt: deps.config.auth.apiKeyEnvVarAlt,
       apiKeyFileEnvVar: deps.config.auth.apiKeyFileEnvVar,
       oauthScopes: deps.config.auth.oauthScopes,
-    });
+    } as const;
+    const auth = await resolveGeminiAuth(authOpts);
+
+    const resolvedTimeoutMs = deps.config.timeoutMs;
+
+    let fallbackApiKey: string | undefined;
+    if (auth.type === "oauth" && deps.config.auth.mode === "auto") {
+      try {
+        const apiKeyAuth = await resolveGeminiAuth({
+          ...authOpts,
+          mode: "apiKey",
+        });
+        if (apiKeyAuth.type === "apiKey") {
+          fallbackApiKey = apiKeyAuth.apiKey;
+        }
+      } catch {
+        // No API key available for fallback
+      }
+    }
 
     const clientConfig =
       auth.type === "oauth"
-        ? { accessToken: auth.accessToken, baseUrl: deps.config.apiBaseUrl, timeoutMs: deps.config.timeoutMs }
-        : { apiKey: auth.apiKey, baseUrl: deps.config.apiBaseUrl, timeoutMs: deps.config.timeoutMs };
+        ? {
+            accessToken: auth.accessToken,
+            apiKey: fallbackApiKey,
+            allowApiKeyFallback: Boolean(fallbackApiKey),
+            baseUrl: deps.config.apiBaseUrl,
+            timeoutMs: resolvedTimeoutMs,
+          }
+        : {
+            apiKey: auth.apiKey,
+            baseUrl: deps.config.apiBaseUrl,
+            timeoutMs: resolvedTimeoutMs,
+          };
     const client = new GeminiClient(clientConfig, deps.logger);
 
     const apiModels = await fetchAllApiModels(client);
@@ -220,13 +301,17 @@ export async function refreshCuratedGeminiModels(deps: { config: BridgeConfig; l
 
     const curated = buildCuratedModelsFromApi(apiModels);
     if (curated.length === 0) {
-      throw new Error("Failed to build curated models from Gemini API response.");
+      throw new Error(
+        "Failed to build curated models from Gemini API response.",
+      );
     }
 
     const updatedAtMs = Date.now();
     cachedSnapshot = { updatedAtMs, models: curated };
     writeCacheToDisk(curated, updatedAtMs);
-    deps.logger.info("Refreshed curated Gemini model list", { count: curated.length });
+    deps.logger.info("Refreshed curated Gemini model list", {
+      count: curated.length,
+    });
   })()
     .catch((error) => {
       deps.logger.warn("Failed to refresh curated Gemini model list", {
@@ -240,7 +325,10 @@ export async function refreshCuratedGeminiModels(deps: { config: BridgeConfig; l
   return refreshInFlight;
 }
 
-export function startCuratedModelsAutoRefresh(deps: { config: BridgeConfig; logger: Logger }): void {
+export function startCuratedModelsAutoRefresh(deps: {
+  config: BridgeConfig;
+  logger: Logger;
+}): void {
   if (refreshTimer) return;
   const snapshot = getSnapshot();
   if (!isSnapshotFresh(snapshot)) {
@@ -252,6 +340,8 @@ export function startCuratedModelsAutoRefresh(deps: { config: BridgeConfig; logg
   refreshTimer.unref?.();
 }
 
-export function listCuratedGeminiModels(filter: CuratedModelFilter = "all"): CuratedModel[] {
+export function listCuratedGeminiModels(
+  filter: CuratedModelFilter = "all",
+): CuratedModel[] {
   return listModelsFromSnapshot(filter, getSnapshot());
 }

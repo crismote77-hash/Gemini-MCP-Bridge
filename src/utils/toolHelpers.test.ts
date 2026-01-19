@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { withBudgetReservation } from "./toolHelpers.js";
+import { withBudgetReservation, validateInputSize } from "./toolHelpers.js";
 import type { ToolDependencies } from "./toolHelpers.js";
 import type { DailyTokenBudget } from "../limits/dailyTokenBudget.js";
 import type { BridgeConfig } from "../config.js";
@@ -46,7 +46,9 @@ describe("withBudgetReservation", () => {
     const error = new Error("Operation failed");
     const mockFn = vi.fn().mockRejectedValue(error);
 
-    await expect(withBudgetReservation(mockDeps, 100, mockFn)).rejects.toThrow(error);
+    await expect(withBudgetReservation(mockDeps, 100, mockFn)).rejects.toThrow(
+      error,
+    );
 
     expect(mockBudget.reserve).toHaveBeenCalledWith(100);
     expect(mockBudget.release).toHaveBeenCalledWith({ tokens: 100 });
@@ -57,12 +59,26 @@ describe("withBudgetReservation", () => {
     const mockFn = vi.fn().mockRejectedValue(error);
     releaseMock.mockRejectedValue(new Error("Release failed"));
 
-    await expect(withBudgetReservation(mockDeps, 100, mockFn)).rejects.toThrow(error);
+    await expect(withBudgetReservation(mockDeps, 100, mockFn)).rejects.toThrow(
+      error,
+    );
 
     expect(mockBudget.release).toHaveBeenCalled();
     expect(mockDeps.logger.warn).toHaveBeenCalledWith(
       "Failed to release budget reservation",
-      expect.objectContaining({ error: "Release failed" })
+      expect.objectContaining({ error: "Release failed" }),
     );
+  });
+});
+
+describe("validateInputSize", () => {
+  it("returns null when input is within limits", () => {
+    expect(validateInputSize("hello", 5)).toBeNull();
+  });
+
+  it("accounts for extraChars in the total size", () => {
+    const result = validateInputSize("hello", 5, "input", 1);
+    expect(result?.isError).toBe(true);
+    expect(result?.content[0].text).toContain("Max input is 5 characters");
   });
 });

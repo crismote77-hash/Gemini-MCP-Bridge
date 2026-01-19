@@ -12,9 +12,8 @@ import {
   createGeminiClient,
   checkLimits,
   withToolErrorHandling,
+  takeAuthFallbackWarnings,
 } from "../utils/toolHelpers.js";
-
-const DEFAULT_COUNT_MODEL = "gemini-2.5-flash";
 
 type Dependencies = {
   config: BridgeConfig;
@@ -23,7 +22,10 @@ type Dependencies = {
   dailyBudget: DailyTokenBudget;
 };
 
-export function registerCountTokensTool(server: McpServer, deps: Dependencies): void {
+export function registerCountTokensTool(
+  server: McpServer,
+  deps: Dependencies,
+): void {
   server.registerTool(
     "gemini_count_tokens",
     {
@@ -43,20 +45,32 @@ export function createCountTokensHandler(deps: Dependencies) {
 
   return async ({ text, model }: { text: string; model?: string }) => {
     return withToolErrorHandling("gemini_count_tokens", toolDeps, async () => {
-      const inputError = validateInputSize(text, deps.config.limits.maxInputChars);
+      const inputError = validateInputSize(
+        text,
+        deps.config.limits.maxInputChars,
+      );
       if (inputError) return inputError;
 
       const client = await createGeminiClient(toolDeps);
       await checkLimits(toolDeps);
 
-      const response = await client.countTokens<unknown>(model ?? DEFAULT_COUNT_MODEL, {
-        contents: [{ role: "user", parts: [{ text }] }],
-      });
+      const response = await client.countTokens<unknown>(
+        model ?? deps.config.model,
+        {
+          contents: [{ role: "user", parts: [{ text }] }],
+        },
+      );
 
       await deps.dailyBudget.commit("gemini_count_tokens", 0);
       const usage = await deps.dailyBudget.getUsage();
       const usageFooter = formatUsageFooter(0, usage);
-      return { content: [textBlock(`${JSON.stringify(response, null, 2)}\n\n${usageFooter}`)] };
+      const warnings = takeAuthFallbackWarnings(client);
+      return {
+        content: [
+          textBlock(`${JSON.stringify(response, null, 2)}\n\n${usageFooter}`),
+          ...warnings,
+        ],
+      };
     });
   };
 }

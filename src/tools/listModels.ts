@@ -6,12 +6,18 @@ import { RateLimiter } from "../limits/rateLimiter.js";
 import { DailyTokenBudget } from "../limits/dailyTokenBudget.js";
 import { textBlock } from "../utils/textBlock.js";
 import { formatUsageFooter } from "../utils/usageFooter.js";
-import { listCuratedGeminiModels, type CuratedModelFilter } from "../models/curatedModels.js";
+import { sortModelsNewToOld } from "../utils/modelSort.js";
+import { isRecord } from "../utils/typeGuards.js";
+import {
+  listCuratedGeminiModels,
+  type CuratedModelFilter,
+} from "../models/curatedModels.js";
 import {
   type ToolDependencies,
   createGeminiClient,
   checkLimits,
   withToolErrorHandling,
+  takeAuthFallbackWarnings,
 } from "../utils/toolHelpers.js";
 
 type Dependencies = {
@@ -22,15 +28,21 @@ type Dependencies = {
 };
 
 const MAX_LIMIT = 200;
+const DEFAULT_LIMIT = 200;
 
-export function registerListModelsTool(server: McpServer, deps: Dependencies): void {
+export function registerListModelsTool(
+  server: McpServer,
+  deps: Dependencies,
+): void {
   server.registerTool(
     "gemini_list_models",
     {
       title: "Gemini List Models",
       description: "List Gemini models via the Gemini API.",
       inputSchema: {
-        filter: z.enum(["all", "thinking", "vision", "grounding", "json_mode"]).optional(),
+        filter: z
+          .enum(["all", "thinking", "vision", "grounding", "json_mode"])
+          .optional(),
         limit: z.number().int().positive().max(MAX_LIMIT).optional(),
         pageToken: z.string().optional(),
       },
@@ -53,28 +65,46 @@ export function createListModelsHandler(deps: Dependencies) {
   }) => {
     return withToolErrorHandling("gemini_list_models", toolDeps, async () => {
       if (filter) {
-        const curated = listCuratedGeminiModels(filter);
+        // Still check rate limits for curated queries to prevent abuse
+        await deps.rateLimiter.checkOrThrow();
+        const curated = sortModelsNewToOld(listCuratedGeminiModels(filter));
         await deps.dailyBudget.commit("gemini_list_models", 0);
         const usage = await deps.dailyBudget.getUsage();
         const usageFooter = formatUsageFooter(0, usage);
         const payload = { source: "curated", filter, models: curated };
-        return { content: [textBlock(`${JSON.stringify(payload, null, 2)}\n\n${usageFooter}`)] };
+        return {
+          content: [
+            textBlock(`${JSON.stringify(payload, null, 2)}\n\n${usageFooter}`),
+          ],
+        };
       }
 
       await checkLimits(toolDeps);
       try {
         const client = await createGeminiClient(toolDeps);
         const response = await client.listModels<unknown>({
-          pageSize: limit ?? 20,
+          pageSize: limit ?? DEFAULT_LIMIT,
           pageToken,
         });
+        const sortedResponse =
+          isRecord(response) && Array.isArray(response.models)
+            ? { ...response, models: sortModelsNewToOld(response.models) }
+            : response;
 
         await deps.dailyBudget.commit("gemini_list_models", 0);
         const usage = await deps.dailyBudget.getUsage();
         const usageFooter = formatUsageFooter(0, usage);
-        return { content: [textBlock(`${JSON.stringify(response, null, 2)}\n\n${usageFooter}`)] };
+        const warnings = takeAuthFallbackWarnings(client);
+        return {
+          content: [
+            textBlock(
+              `${JSON.stringify(sortedResponse, null, 2)}\n\n${usageFooter}`,
+            ),
+            ...warnings,
+          ],
+        };
       } catch (error) {
-        const curated = listCuratedGeminiModels("all");
+        const curated = sortModelsNewToOld(listCuratedGeminiModels("all"));
         await deps.dailyBudget.commit("gemini_list_models", 0);
         const usage = await deps.dailyBudget.getUsage();
         const usageFooter = formatUsageFooter(0, usage);
@@ -88,7 +118,9 @@ export function createListModelsHandler(deps: Dependencies) {
         };
         return {
           isError: true,
-          content: [textBlock(`${JSON.stringify(payload, null, 2)}\n\n${usageFooter}`)],
+          content: [
+            textBlock(`${JSON.stringify(payload, null, 2)}\n\n${usageFooter}`),
+          ],
         };
       }
     });

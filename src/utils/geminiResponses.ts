@@ -1,3 +1,5 @@
+import { isRecord } from "./typeGuards.js";
+
 export type GeminiUsage = {
   promptTokens: number;
   candidatesTokens: number;
@@ -31,10 +33,6 @@ export type GeminiResponse = {
   usageMetadata?: GeminiUsageMetadata;
   modelVersion?: string;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isGeminiResponse(value: unknown): value is GeminiResponse {
   if (!isRecord(value)) return false;
@@ -83,9 +81,16 @@ export function extractUsage(response: unknown): GeminiUsage {
   const usage = response.usageMetadata;
   if (!isRecord(usage)) return defaultUsage;
 
-  const prompt = typeof usage.promptTokenCount === "number" ? usage.promptTokenCount : 0;
-  const candidates = typeof usage.candidatesTokenCount === "number" ? usage.candidatesTokenCount : 0;
-  const total = typeof usage.totalTokenCount === "number" ? usage.totalTokenCount : prompt + candidates;
+  const prompt =
+    typeof usage.promptTokenCount === "number" ? usage.promptTokenCount : 0;
+  const candidates =
+    typeof usage.candidatesTokenCount === "number"
+      ? usage.candidatesTokenCount
+      : 0;
+  const total =
+    typeof usage.totalTokenCount === "number"
+      ? usage.totalTokenCount
+      : prompt + candidates;
 
   return {
     promptTokens: Number.isFinite(prompt) ? prompt : 0,

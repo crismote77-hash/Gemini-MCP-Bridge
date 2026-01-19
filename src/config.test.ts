@@ -11,12 +11,18 @@ describe("loadConfig", () => {
 
   it("should return default values when no config is provided", () => {
     const config = loadConfig({ env: {} });
-    expect(config.apiBaseUrl).toBe("https://generativelanguage.googleapis.com/v1beta");
+    expect(config.backend).toBe("developer");
+    expect(config.apiBaseUrl).toBe(
+      "https://generativelanguage.googleapis.com/v1beta",
+    );
     expect(config.model).toBe("gemini-2.5-flash");
     expect(config.timeoutMs).toBe(30000);
     expect(config.generation.temperature).toBe(0.7);
     expect(config.auth.mode).toBe("auto");
-    expect(config.auth.oauthScopes).toEqual(["https://www.googleapis.com/auth/generative-language"]);
+    expect(config.auth.oauthScopes).toEqual([
+      "https://www.googleapis.com/auth/generative-language",
+    ]);
+    expect(config.vertex.publisher).toBe("google");
   });
 
   it("should allow overriding timeoutMs via environment variable", () => {
@@ -45,5 +51,19 @@ describe("loadConfig", () => {
       },
     });
     expect(config.model).toBe("gemini-pro-vision");
+  });
+
+  it("should allow configuring Vertex backend via env vars", () => {
+    const config = loadConfig({
+      env: {
+        GEMINI_MCP_BACKEND: "vertex",
+        GEMINI_MCP_VERTEX_PROJECT: "my-project",
+        GEMINI_MCP_VERTEX_LOCATION: "us-central1",
+      },
+    });
+    expect(config.backend).toBe("vertex");
+    expect(config.vertex.project).toBe("my-project");
+    expect(config.vertex.location).toBe("us-central1");
+    expect(config.vertex.publisher).toBe("google");
   });
 });

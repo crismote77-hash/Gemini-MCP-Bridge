@@ -18,9 +18,17 @@
     "lint": "eslint src/",
     "format": "prettier --write src/",
     "inspect": "npx @modelcontextprotocol/inspector node dist/index.js",
+    "setup": "node scripts/setup.mjs",
     "runbook:note": "node scripts/runbook-note.mjs"
   },
-  "keywords": ["mcp", "gemini", "google", "ai", "model-context-protocol", "codex"],
+  "keywords": [
+    "mcp",
+    "gemini",
+    "google",
+    "ai",
+    "model-context-protocol",
+    "codex"
+  ],
   "author": "Cristobal Mora <crismote77@gmail.com>",
   "license": "MIT",
   "dependencies": {
@@ -33,8 +41,10 @@
     "@eslint/js": "^9.39.2",
     "@types/node": "^22.0.0",
     "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
     "globals": "^17.0.0",
-    "prettier": "^3.4.0",
+    "prettier": "^3.8.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.53.0",
     "vitest": "^2.0.0"

@@ -19,10 +19,16 @@ export class ConversationStore {
   private readonly maxTotalChars: number;
   private readonly conversations = new Map<string, ConversationState>();
   private lastActiveId: string | null = null;
+  private readonly nowMs: () => number;
 
-  constructor(opts: { maxTurns: number; maxTotalChars: number }) {
+  constructor(opts: {
+    maxTurns: number;
+    maxTotalChars: number;
+    nowMs?: () => number;
+  }) {
     this.maxTurns = opts.maxTurns;
     this.maxTotalChars = opts.maxTotalChars;
+    this.nowMs = opts.nowMs ?? (() => Date.now());
   }
 
   get(id: string): ConversationState | undefined {
@@ -35,7 +41,7 @@ export class ConversationStore {
   }
 
   append(id: string, message: ContentMessage): ConversationState {
-    const now = new Date().toISOString();
+    const now = new Date(this.nowMs()).toISOString();
     const existing = this.conversations.get(id);
     const contents = existing ? [...existing.contents, message] : [message];
     const trimmed = this.trim(contents);
@@ -69,9 +75,13 @@ export class ConversationStore {
     return result;
   }
 
-  private truncateMessage(message: ContentMessage, maxChars: number): ContentMessage {
+  private truncateMessage(
+    message: ContentMessage,
+    maxChars: number,
+  ): ContentMessage {
     let remainingChars = maxChars;
     const truncatedParts: ContentPart[] = [];
+    const marker = "... [truncated]";
 
     for (const part of message.parts) {
       if (remainingChars <= 0) break;
@@ -81,9 +91,14 @@ export class ConversationStore {
           truncatedParts.push(part);
           remainingChars -= part.text.length;
         } else {
-          // Truncate text and add marker
-          const truncatedText = part.text.slice(0, remainingChars - 15) + "... [truncated]";
-          truncatedParts.push({ text: truncatedText });
+          // Truncate text safely and add marker if it fits
+          if (remainingChars > marker.length) {
+            const sliceLen = remainingChars - marker.length;
+            const truncatedText = part.text.slice(0, sliceLen) + marker;
+            truncatedParts.push({ text: truncatedText });
+          } else {
+            truncatedParts.push({ text: part.text.slice(0, remainingChars) });
+          }
           remainingChars = 0;
         }
       } else if (part.inlineData?.data) {

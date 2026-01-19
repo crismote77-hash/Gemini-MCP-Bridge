@@ -47,7 +47,11 @@ export async function createSharedLimitStore(opts: {
   const connectPromise = client.connect();
   const timeoutPromise = new Promise<never>((_, reject) => {
     setTimeout(() => {
-      reject(new RedisConnectionError(`Redis connection timed out after ${timeoutMs}ms`));
+      reject(
+        new RedisConnectionError(
+          `Redis connection timed out after ${timeoutMs}ms`,
+        ),
+      );
     }, timeoutMs);
   });
 
@@ -64,7 +68,7 @@ export async function createSharedLimitStore(opts: {
     const message = error instanceof Error ? error.message : String(error);
     opts.logger.error("Failed to connect to Redis", {
       url: redactRedisUrl(opts.redisUrl),
-      error: message
+      error: message,
     });
     throw new RedisConnectionError(`Failed to connect to Redis: ${message}`);
   }
@@ -76,10 +80,15 @@ export async function createSharedLimitStore(opts: {
     } catch {
       // Ignore disconnect errors during cleanup
     }
-    throw new RedisConnectionError(`Redis connection error: ${connectionErrorMessage}`);
+    throw new RedisConnectionError(
+      `Redis connection error: ${connectionErrorMessage}`,
+    );
   }
 
-  opts.logger.info("Shared limits enabled (Redis)", { url: redactRedisUrl(opts.redisUrl), keyPrefix: opts.keyPrefix });
+  opts.logger.info("Shared limits enabled (Redis)", {
+    url: redactRedisUrl(opts.redisUrl),
+    keyPrefix: opts.keyPrefix,
+  });
 
   return {
     client,

@@ -19,7 +19,11 @@ function formatMeta(meta: Record<string, unknown> | undefined): string {
 }
 
 export function createStderrLogger(opts: { debugEnabled: boolean }): Logger {
-  const write = (level: LogLevel, message: string, meta?: Record<string, unknown>) => {
+  const write = (
+    level: LogLevel,
+    message: string,
+    meta?: Record<string, unknown>,
+  ) => {
     if (level === "debug" && !opts.debugEnabled) return;
     // IMPORTANT: stderr only. Stdout is reserved for JSON-RPC over stdio.
     const safeMessage = redactString(message);

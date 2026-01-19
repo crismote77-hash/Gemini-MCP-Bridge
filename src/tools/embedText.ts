@@ -12,6 +12,7 @@ import {
   createGeminiClient,
   withToolErrorHandling,
   withBudgetReservation,
+  takeAuthFallbackWarnings,
 } from "../utils/toolHelpers.js";
 
 const DEFAULT_EMBED_MODEL = "text-embedding-004";
@@ -23,7 +24,10 @@ type Dependencies = {
   dailyBudget: DailyTokenBudget;
 };
 
-export function registerEmbedTextTool(server: McpServer, deps: Dependencies): void {
+export function registerEmbedTextTool(
+  server: McpServer,
+  deps: Dependencies,
+): void {
   server.registerTool(
     "gemini_embed_text",
     {
@@ -43,27 +47,50 @@ export function createEmbedTextHandler(deps: Dependencies) {
 
   return async ({ text, model }: { text: string; model?: string }) => {
     return withToolErrorHandling("gemini_embed_text", toolDeps, async () => {
-      const inputError = validateInputSize(text, deps.config.limits.maxInputChars);
+      const inputError = validateInputSize(
+        text,
+        deps.config.limits.maxInputChars,
+      );
       if (inputError) return inputError;
 
       const client = await createGeminiClient(toolDeps);
       await deps.rateLimiter.checkOrThrow();
-      
+
       const estimatedTokens = Math.ceil(text.length / 4);
 
-      return withBudgetReservation(toolDeps, estimatedTokens, async (reservation) => {
-        const response = await client.embedContent<unknown>(model ?? DEFAULT_EMBED_MODEL, {
-          content: {
-            parts: [{ text }],
-          },
-        });
+      return withBudgetReservation(
+        toolDeps,
+        estimatedTokens,
+        async (reservation) => {
+          const response = await client.embedContent<unknown>(
+            model ?? DEFAULT_EMBED_MODEL,
+            {
+              content: {
+                parts: [{ text }],
+              },
+            },
+          );
 
-        await deps.dailyBudget.commit("gemini_embed_text", estimatedTokens, undefined, reservation);
-        
-        const usage = await deps.dailyBudget.getUsage();
-        const usageFooter = formatUsageFooter(estimatedTokens, usage);
-        return { content: [textBlock(`${JSON.stringify(response, null, 2)}\n\n${usageFooter}`)] };
-      });
+          await deps.dailyBudget.commit(
+            "gemini_embed_text",
+            estimatedTokens,
+            undefined,
+            reservation,
+          );
+
+          const usage = await deps.dailyBudget.getUsage();
+          const usageFooter = formatUsageFooter(estimatedTokens, usage);
+          const warnings = takeAuthFallbackWarnings(client);
+          return {
+            content: [
+              textBlock(
+                `${JSON.stringify(response, null, 2)}\n\n${usageFooter}`,
+              ),
+              ...warnings,
+            ],
+          };
+        },
+      );
     });
   };
 }

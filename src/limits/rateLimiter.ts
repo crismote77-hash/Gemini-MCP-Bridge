@@ -39,7 +39,11 @@ export class RateLimiter {
     return {1, count + 1}
   `;
 
-  constructor(opts: { maxPerMinute: number; nowMs?: () => number; sharedStore?: SharedLimitStore }) {
+  constructor(opts: {
+    maxPerMinute: number;
+    nowMs?: () => number;
+    sharedStore?: SharedLimitStore;
+  }) {
     this.maxPerMinute = opts.maxPerMinute;
     this.nowMs = opts.nowMs ?? (() => Date.now());
     this.sharedStore = opts.sharedStore;
@@ -71,7 +75,9 @@ export class RateLimiter {
     this.timestamps.push(...validTimestamps);
 
     if (this.timestamps.length >= this.maxPerMinute) {
-      throw new RateLimitError(`Rate limit exceeded (${this.maxPerMinute}/minute).`);
+      throw new RateLimitError(
+        `Rate limit exceeded (${this.maxPerMinute}/minute).`,
+      );
     }
     this.timestamps.push(now);
   }
@@ -83,20 +89,31 @@ export class RateLimiter {
     const key = `${this.sharedStore.keyPrefix}:rate`;
     const member = `${now}:${randomUUID()}`;
     // Note: client.eval is the Redis EVAL command for Lua scripts, not JavaScript eval()
-    const result: unknown = await this.sharedStore.client.eval(RateLimiter.SHARED_SCRIPT, {
-      keys: [key],
-      arguments: [String(now), String(cutoff), String(this.maxPerMinute), "120", member],
-    });
+    const result: unknown = await this.sharedStore.client.eval(
+      RateLimiter.SHARED_SCRIPT,
+      {
+        keys: [key],
+        arguments: [
+          String(now),
+          String(cutoff),
+          String(this.maxPerMinute),
+          "120",
+          member,
+        ],
+      },
+    );
 
     if (!isRateLimitEvalResult(result)) {
       throw new Error(
-        `Unexpected Redis rate limit response format: expected [number, number], got ${JSON.stringify(result)}`
+        `Unexpected Redis rate limit response format: expected [number, number], got ${JSON.stringify(result)}`,
       );
     }
 
     const [allowed, count] = result;
     if (!allowed) {
-      throw new RateLimitError(`Rate limit exceeded (${count}/${this.maxPerMinute}/minute).`);
+      throw new RateLimitError(
+        `Rate limit exceeded (${count}/${this.maxPerMinute}/minute).`,
+      );
     }
   }
 }

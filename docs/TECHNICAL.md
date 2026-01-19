@@ -12,7 +12,7 @@ src/
   server.ts          # MCP server wiring
   httpServer.ts      # Streamable HTTP transport
   config.ts          # Config loader with env overrides
-  logger.ts          # Stderr JSON logger
+  logger.ts          # Stderr logger with redaction
   auth/              # OAuth + API key resolution
   models/            # Curated model metadata
   prompts/           # MCP prompts
@@ -29,6 +29,14 @@ src/
     redact.ts        # Sensitive data redaction
     paths.ts         # Path expansion utilities
 ```
+
+## Configuration
+
+- Default config path: `~/.gemini-mcp-bridge/config.json` (override with `--config`)
+- CLI flags: `--stdio` (default), `--http`, `--http-host`, `--http-port`, `--doctor`, `--check-api`, `--print-config`
+- Backends:
+  - `developer` (default): Gemini Developer API (`https://generativelanguage.googleapis.com`)
+  - `vertex`: Vertex AI (`https://{location}-aiplatform.googleapis.com`) + project/location required
 
 ## Architecture
 
@@ -86,6 +94,13 @@ npm run build
 npm test
 npm run lint
 ```
+
+## Setup Wizard
+
+- `npm run setup` runs `scripts/setup.mjs` to guide backend selection, write the
+  config file, optionally run `gcloud` steps for Vertex, and optionally configure
+  MCP client configs for one or more users.
+- The wizard uses ANSI color output when attached to a TTY; set `NO_COLOR=1` to disable.
 
 ## Security Notes
 

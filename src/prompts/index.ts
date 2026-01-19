@@ -3,7 +3,11 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { GetPromptResult } from "@modelcontextprotocol/sdk/types.js";
 import { textBlock } from "../utils/textBlock.js";
 
-export const PROMPT_NAMES = ["code_review", "explain_with_thinking", "creative_writing"] as const;
+export const PROMPT_NAMES = [
+  "code_review",
+  "explain_with_thinking",
+  "creative_writing",
+] as const;
 
 function singleMessagePrompt(text: string): GetPromptResult {
   return {
@@ -21,7 +25,8 @@ export function registerPrompts(server: McpServer): void {
     "code_review",
     {
       title: "Code Review",
-      description: "Review code for correctness, security, and maintainability.",
+      description:
+        "Review code for correctness, security, and maintainability.",
       argsSchema: {
         code: z.string().min(1),
         language: z.string().optional(),
@@ -68,7 +73,9 @@ export function registerPrompts(server: McpServer): void {
     ({ prompt, style, length }) => {
       const lengthText = length ? `${length} ` : "short ";
       const styleText = style ? `${style} ` : "";
-      return singleMessagePrompt(`Write a ${lengthText}${styleText}piece based on: ${prompt}`);
+      return singleMessagePrompt(
+        `Write a ${lengthText}${styleText}piece based on: ${prompt}`,
+      );
     },
   );
 }

@@ -3,7 +3,11 @@ import type { ConversationStore } from "../services/conversationStore.js";
 import type { Logger } from "../logger.js";
 import { redactString } from "../utils/redact.js";
 
-export function registerConversationResource(server: McpServer, store: ConversationStore, logger: Logger): void {
+export function registerConversationResource(
+  server: McpServer,
+  store: ConversationStore,
+  logger: Logger,
+): void {
   server.registerResource(
     "conversation_current",
     "conversation://current",
@@ -33,13 +37,19 @@ export function registerConversationResource(server: McpServer, store: Conversat
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        logger.error("Failed to load conversation state", { error: redactString(message) });
+        logger.error("Failed to load conversation state", {
+          error: redactString(message),
+        });
         return {
           contents: [
             {
               uri: "conversation://current",
               mimeType: "application/json",
-              text: JSON.stringify({ error: "Conversation data unavailable" }, null, 2),
+              text: JSON.stringify(
+                { error: "Conversation data unavailable" },
+                null,
+                2,
+              ),
             },
           ],
         };

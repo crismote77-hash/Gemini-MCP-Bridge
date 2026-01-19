@@ -27,7 +27,10 @@ export class DailyTokenBudget {
   private usedTokens = 0;
   private usedCostNanoUsd = 0;
   private hasCost = false;
-  private byTool: Record<string, { tokens: number; calls: number; costNanoUsd: number }> = {};
+  private byTool: Record<
+    string,
+    { tokens: number; calls: number; costNanoUsd: number }
+  > = {};
   private readonly sharedStore?: SharedLimitStore;
   private static readonly SHARED_TTL_SECONDS = 172800;
   private static readonly RESERVE_SCRIPT = `
@@ -45,7 +48,11 @@ export class DailyTokenBudget {
     return {1, next}
   `;
 
-  constructor(opts: { maxTokensPerDay: number; nowMs?: () => number; sharedStore?: SharedLimitStore }) {
+  constructor(opts: {
+    maxTokensPerDay: number;
+    nowMs?: () => number;
+    sharedStore?: SharedLimitStore;
+  }) {
     this.maxTokensPerDay = opts.maxTokensPerDay;
     this.nowMs = opts.nowMs ?? (() => Date.now());
     this.currentDay = utcDayKey(this.nowMs());
@@ -58,20 +65,33 @@ export class DailyTokenBudget {
     maxTokens: number;
     requestCount: number;
     estimatedCostUsd?: number;
-    byTool: Record<string, { tokens: number; calls: number; estimatedCostUsd?: number }>;
+    byTool: Record<
+      string,
+      { tokens: number; calls: number; estimatedCostUsd?: number }
+    >;
   }> {
     if (this.sharedStore) {
       return this.getSharedUsage();
     }
     this.rollIfNeeded();
-    const requestCount = Object.values(this.byTool).reduce((sum, entry) => sum + entry.calls, 0);
-    const estimatedCostUsd = this.hasCost ? this.usedCostNanoUsd / 1_000_000_000 : undefined;
-    const byTool: Record<string, { tokens: number; calls: number; estimatedCostUsd?: number }> = {};
+    const requestCount = Object.values(this.byTool).reduce(
+      (sum, entry) => sum + entry.calls,
+      0,
+    );
+    const estimatedCostUsd = this.hasCost
+      ? this.usedCostNanoUsd / 1_000_000_000
+      : undefined;
+    const byTool: Record<
+      string,
+      { tokens: number; calls: number; estimatedCostUsd?: number }
+    > = {};
     for (const [toolName, entry] of Object.entries(this.byTool)) {
       byTool[toolName] = {
         tokens: entry.tokens,
         calls: entry.calls,
-        ...(this.hasCost ? { estimatedCostUsd: entry.costNanoUsd / 1_000_000_000 } : {}),
+        ...(this.hasCost
+          ? { estimatedCostUsd: entry.costNanoUsd / 1_000_000_000 }
+          : {}),
       };
     }
     return {
@@ -88,13 +108,17 @@ export class DailyTokenBudget {
     if (this.sharedStore) {
       const usedTokens = await this.getSharedTotal();
       if (usedTokens >= this.maxTokensPerDay) {
-        throw new BudgetError(`Daily token budget exceeded (${usedTokens}/${this.maxTokensPerDay}).`);
+        throw new BudgetError(
+          `Daily token budget exceeded (${usedTokens}/${this.maxTokensPerDay}).`,
+        );
       }
       return;
     }
     this.rollIfNeeded();
     if (this.usedTokens >= this.maxTokensPerDay) {
-      throw new BudgetError(`Daily token budget exceeded (${this.usedTokens}/${this.maxTokensPerDay}).`);
+      throw new BudgetError(
+        `Daily token budget exceeded (${this.usedTokens}/${this.maxTokensPerDay}).`,
+      );
     }
   }
 
@@ -110,7 +134,9 @@ export class DailyTokenBudget {
     }
     this.rollIfNeeded();
     if (this.usedTokens + normalized > this.maxTokensPerDay) {
-      throw new BudgetError(`Daily token budget exceeded (${this.usedTokens}/${this.maxTokensPerDay}).`);
+      throw new BudgetError(
+        `Daily token budget exceeded (${this.usedTokens}/${this.maxTokensPerDay}).`,
+      );
     }
     this.usedTokens += normalized;
     return { tokens: normalized };
@@ -132,7 +158,11 @@ export class DailyTokenBudget {
     await this.recordUsage("unknown", tokens);
   }
 
-  async recordUsage(toolName: string, tokens: number, costNanoUsd?: number): Promise<void> {
+  async recordUsage(
+    toolName: string,
+    tokens: number,
+    costNanoUsd?: number,
+  ): Promise<void> {
     await this.commit(toolName, tokens, costNanoUsd);
   }
 
@@ -143,14 +173,26 @@ export class DailyTokenBudget {
     reservation?: BudgetReservation,
   ): Promise<void> {
     if (this.sharedStore) {
-      await this.commitSharedUsage(toolName, tokens, costNanoUsd, reservation?.tokens);
+      await this.commitSharedUsage(
+        toolName,
+        tokens,
+        costNanoUsd,
+        reservation?.tokens,
+      );
       return;
     }
     this.rollIfNeeded();
     const normalizedTokens = Math.max(0, tokens);
     const reserved = Math.max(0, Math.trunc(reservation?.tokens ?? 0));
-    this.usedTokens = Math.max(0, this.usedTokens + normalizedTokens - reserved);
-    const existing = this.byTool[toolName] ?? { tokens: 0, calls: 0, costNanoUsd: 0 };
+    this.usedTokens = Math.max(
+      0,
+      this.usedTokens + normalizedTokens - reserved,
+    );
+    const existing = this.byTool[toolName] ?? {
+      tokens: 0,
+      calls: 0,
+      costNanoUsd: 0,
+    };
     this.byTool[toolName] = {
       tokens: existing.tokens + normalizedTokens,
       calls: existing.calls + 1,
@@ -181,13 +223,24 @@ export class DailyTokenBudget {
     const dayKey = utcDayKey(this.nowMs());
     const prefix = `${this.sharedStore.keyPrefix}:budget:${dayKey}`;
     const totalKey = `${prefix}:total`;
-    const result = (await this.sharedStore.client.eval(DailyTokenBudget.RESERVE_SCRIPT, {
-      keys: [totalKey],
-      arguments: [String(tokens), String(this.maxTokensPerDay), String(DailyTokenBudget.SHARED_TTL_SECONDS)],
-    })) as unknown;
-    const [allowed, usedTokens] = Array.isArray(result) ? (result as [number, number]) : [0, 0];
+    const result = (await this.sharedStore.client.eval(
+      DailyTokenBudget.RESERVE_SCRIPT,
+      {
+        keys: [totalKey],
+        arguments: [
+          String(tokens),
+          String(this.maxTokensPerDay),
+          String(DailyTokenBudget.SHARED_TTL_SECONDS),
+        ],
+      },
+    )) as unknown;
+    const [allowed, usedTokens] = Array.isArray(result)
+      ? (result as [number, number])
+      : [0, 0];
     if (!allowed) {
-      throw new BudgetError(`Daily token budget exceeded (${usedTokens}/${this.maxTokensPerDay}).`);
+      throw new BudgetError(
+        `Daily token budget exceeded (${usedTokens}/${this.maxTokensPerDay}).`,
+      );
     }
   }
 
@@ -197,7 +250,10 @@ export class DailyTokenBudget {
     const prefix = `${this.sharedStore.keyPrefix}:budget:${dayKey}`;
     const totalKey = `${prefix}:total`;
     await this.sharedStore.client.incrBy(totalKey, -tokens);
-    await this.sharedStore.client.expire(totalKey, DailyTokenBudget.SHARED_TTL_SECONDS);
+    await this.sharedStore.client.expire(
+      totalKey,
+      DailyTokenBudget.SHARED_TTL_SECONDS,
+    );
   }
 
   private async commitSharedUsage(
@@ -255,7 +311,10 @@ export class DailyTokenBudget {
     maxTokens: number;
     requestCount: number;
     estimatedCostUsd?: number;
-    byTool: Record<string, { tokens: number; calls: number; estimatedCostUsd?: number }>;
+    byTool: Record<
+      string,
+      { tokens: number; calls: number; estimatedCostUsd?: number }
+    >;
   }> {
     if (!this.sharedStore) {
       return {
@@ -279,7 +338,10 @@ export class DailyTokenBudget {
     const hasCost = costNanoUsdRaw !== null;
 
     const toolNames = await this.sharedStore.client.sMembers(toolsKey);
-    const byTool: Record<string, { tokens: number; calls: number; estimatedCostUsd?: number }> = {};
+    const byTool: Record<
+      string,
+      { tokens: number; calls: number; estimatedCostUsd?: number }
+    > = {};
     let requestCount = 0;
 
     for (const tool of toolNames) {
@@ -290,9 +352,17 @@ export class DailyTokenBudget {
       const callsRaw = await this.sharedStore.client.get(callsKey);
       const tokens = parseNonNegativeNumber(tokensRaw);
       const calls = parseNonNegativeNumber(callsRaw);
-      const toolCostRaw = hasCost ? await this.sharedStore.client.get(costKey) : null;
+      const toolCostRaw = hasCost
+        ? await this.sharedStore.client.get(costKey)
+        : null;
       const toolCost = parseNonNegativeNumber(toolCostRaw);
-      byTool[tool] = { tokens, calls, ...(toolCostRaw !== null ? { estimatedCostUsd: toolCost / 1_000_000_000 } : {}) };
+      byTool[tool] = {
+        tokens,
+        calls,
+        ...(toolCostRaw !== null
+          ? { estimatedCostUsd: toolCost / 1_000_000_000 }
+          : {}),
+      };
       requestCount += calls;
     }
 

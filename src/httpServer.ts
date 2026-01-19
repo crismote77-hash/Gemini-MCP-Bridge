@@ -46,7 +46,7 @@ type HttpServerHandle = {
  */
 function adaptToTransport(
   req: HttpRequest,
-  res: HttpResponse
+  res: HttpResponse,
 ): { req: TransportRequest; res: TransportResponse; body: TransportBody } {
   return {
     req: req as unknown as TransportRequest,
@@ -64,7 +64,11 @@ export async function startHttpServer(
   const transports = new Map<string, StreamableHTTPServerTransport>();
   const servers = new Map<string, McpServer>();
 
-  const registerTransport = (sessionId: string, transport: StreamableHTTPServerTransport, server: McpServer) => {
+  const registerTransport = (
+    sessionId: string,
+    transport: StreamableHTTPServerTransport,
+    server: McpServer,
+  ) => {
     transports.set(sessionId, transport);
     servers.set(sessionId, server);
   };
@@ -111,13 +115,20 @@ export async function startHttpServer(
 
           await server.connect(transportInstance);
           const adapted = adaptToTransport(req, res);
-          await transportInstance.handleRequest(adapted.req, adapted.res, adapted.body);
+          await transportInstance.handleRequest(
+            adapted.req,
+            adapted.res,
+            adapted.body,
+          );
           return;
         }
 
         res.status(400).json({
           jsonrpc: "2.0",
-          error: { code: -32000, message: "Bad Request: No valid session ID provided" },
+          error: {
+            code: -32000,
+            message: "Bad Request: No valid session ID provided",
+          },
           id: null,
         });
         return;
@@ -157,7 +168,7 @@ export async function startHttpServer(
             await transport.close();
           }
           await cleanupTransport(sessionId);
-        })
+        }),
       );
 
       // Log any errors that occurred during cleanup
@@ -166,7 +177,10 @@ export async function startHttpServer(
         if (result.status === "rejected") {
           deps.logger.error("Error closing HTTP transport", {
             sessionId: sessionIds[i],
-            error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+            error:
+              result.reason instanceof Error
+                ? result.reason.message
+                : String(result.reason),
           });
         }
       }
@@ -183,7 +197,11 @@ export class HttpServerError extends Error {
   code?: string;
 }
 
-function formatPortError(error: NodeJS.ErrnoException, host: string, port: number): HttpServerError {
+function formatPortError(
+  error: NodeJS.ErrnoException,
+  host: string,
+  port: number,
+): HttpServerError {
   const serverError = new HttpServerError(error.message);
   serverError.code = error.code;
 
@@ -198,7 +216,11 @@ function formatPortError(error: NodeJS.ErrnoException, host: string, port: numbe
   return serverError;
 }
 
-function listen(app: ReturnType<typeof createMcpExpressApp>, host: string, port: number): Promise<Server> {
+function listen(
+  app: ReturnType<typeof createMcpExpressApp>,
+  host: string,
+  port: number,
+): Promise<Server> {
   return new Promise((resolve, reject) => {
     const server = app.listen(port, host, () => resolve(server));
     server.on("error", (error: NodeJS.ErrnoException) => {

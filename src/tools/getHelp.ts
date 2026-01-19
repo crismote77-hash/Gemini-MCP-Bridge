@@ -1,9 +1,19 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { HELP_EXAMPLES, HELP_PARAMETERS, HELP_USAGE } from "../resources/helpContent.js";
+import {
+  HELP_EXAMPLES,
+  HELP_PARAMETERS,
+  HELP_USAGE,
+} from "../resources/helpContent.js";
 import { textBlock } from "../utils/textBlock.js";
 
-type Topic = "overview" | "tools" | "models" | "parameters" | "examples" | "quick-start";
+type Topic =
+  | "overview"
+  | "tools"
+  | "models"
+  | "parameters"
+  | "examples"
+  | "quick-start";
 
 export function registerGetHelpTool(server: McpServer): void {
   server.registerTool(
@@ -12,7 +22,16 @@ export function registerGetHelpTool(server: McpServer): void {
       title: "Gemini Help",
       description: "Get help on using Gemini MCP Bridge.",
       inputSchema: {
-        topic: z.enum(["overview", "tools", "models", "parameters", "examples", "quick-start"]).optional(),
+        topic: z
+          .enum([
+            "overview",
+            "tools",
+            "models",
+            "parameters",
+            "examples",
+            "quick-start",
+          ])
+          .optional(),
       },
     },
     createGetHelpHandler(),

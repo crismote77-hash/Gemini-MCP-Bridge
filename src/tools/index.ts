@@ -1,9 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { BridgeConfig } from "../config.js";
-import type { Logger } from "../logger.js";
 import type { ConversationStore } from "../services/conversationStore.js";
-import { RateLimiter } from "../limits/rateLimiter.js";
-import { DailyTokenBudget } from "../limits/dailyTokenBudget.js";
+import { type ToolDependencies as BaseToolDependencies } from "../utils/toolHelpers.js";
 import { registerGenerateTextTool } from "./generateText.js";
 import { registerAnalyzeImageTool } from "./analyzeImage.js";
 import { registerEmbedTextTool } from "./embedText.js";
@@ -11,11 +8,11 @@ import { registerCountTokensTool } from "./countTokens.js";
 import { registerListModelsTool } from "./listModels.js";
 import { registerGetHelpTool } from "./getHelp.js";
 
-export type ToolDependencies = {
-  config: BridgeConfig;
-  logger: Logger;
-  rateLimiter: RateLimiter;
-  dailyBudget: DailyTokenBudget;
+/**
+ * Full tool dependencies including conversation store.
+ * Extends the base ToolDependencies from toolHelpers.
+ */
+export type ToolDependencies = BaseToolDependencies & {
   conversationStore: ConversationStore;
 };
 

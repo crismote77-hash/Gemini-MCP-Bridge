@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { createSign } from "node:crypto";
 import { expandHome } from "../utils/paths.js";
+import { isRecord } from "../utils/typeGuards.js";
 
 export class AuthError extends Error {
   name = "AuthError";
@@ -50,14 +51,56 @@ type TokenResponse = {
   error_description?: string;
 };
 
-const DEFAULT_ADC_PATH = path.join(os.homedir(), ".config", "gcloud", "application_default_credentials.json");
+const DEFAULT_ADC_PATH = path.join(
+  os.homedir(),
+  ".config",
+  "gcloud",
+  "application_default_credentials.json",
+);
 const DEFAULT_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const TOKEN_EXPIRY_SKEW_MS = 60_000;
+const OAUTH_CACHE_MAX_SIZE = 100;
 
-const oauthCache = new Map<string, { accessToken: string; expiresAt?: number; source: OAuthSource }>();
+type OAuthCacheEntry = {
+  accessToken: string;
+  expiresAt?: number;
+  source: OAuthSource;
+  lastUsedAt: number;
+};
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+const oauthCache = new Map<string, OAuthCacheEntry>();
+
+/**
+ * Prunes expired entries and enforces max cache size using LRU eviction.
+ */
+function pruneOAuthCache(): void {
+  const now = Date.now();
+
+  // Remove expired entries first
+  for (const [key, entry] of oauthCache) {
+    if (entry.expiresAt && entry.expiresAt < now) {
+      oauthCache.delete(key);
+    }
+  }
+
+  // If still over limit, evict least recently used entries
+  if (oauthCache.size > OAUTH_CACHE_MAX_SIZE) {
+    const entries = Array.from(oauthCache.entries()).sort(
+      (a, b) => a[1].lastUsedAt - b[1].lastUsedAt,
+    );
+    const toRemove = entries.slice(0, oauthCache.size - OAUTH_CACHE_MAX_SIZE);
+    for (const [key] of toRemove) {
+      oauthCache.delete(key);
+    }
+  }
+}
+
+function resolveEnvOAuthToken(
+  env: NodeJS.ProcessEnv,
+): { accessToken: string } | null {
+  const envToken = env.GEMINI_MCP_OAUTH_TOKEN ?? env.GOOGLE_OAUTH_ACCESS_TOKEN;
+  const accessToken = envToken?.trim();
+  return accessToken ? { accessToken } : null;
 }
 
 function readJsonFile(filePath: string): unknown {
@@ -67,7 +110,9 @@ function readJsonFile(filePath: string): unknown {
     return JSON.parse(raw) as unknown;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new AuthError(`Invalid JSON in credentials file ${filePath}: ${message}`);
+    throw new AuthError(
+      `Invalid JSON in credentials file ${filePath}: ${message}`,
+    );
   }
 }
 
@@ -123,7 +168,10 @@ function parseExpiresIn(value: unknown): number | undefined {
   return undefined;
 }
 
-async function requestToken(url: string, body: URLSearchParams): Promise<{ accessToken: string; expiresIn?: number }> {
+async function requestToken(
+  url: string,
+  body: URLSearchParams,
+): Promise<{ accessToken: string; expiresIn?: number }> {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -140,10 +188,17 @@ async function requestToken(url: string, body: URLSearchParams): Promise<{ acces
     }
   }
   if (!response.ok || !parsed.access_token) {
-    const message = parsed.error_description || parsed.error || raw || `HTTP ${response.status}`;
+    const message =
+      parsed.error_description ||
+      parsed.error ||
+      raw ||
+      `HTTP ${response.status}`;
     throw new AuthError(`OAuth token exchange failed: ${message}`);
   }
-  return { accessToken: parsed.access_token, expiresIn: parseExpiresIn(parsed.expires_in) };
+  return {
+    accessToken: parsed.access_token,
+    expiresIn: parseExpiresIn(parsed.expires_in),
+  };
 }
 
 async function resolveAuthorizedUserToken(
@@ -159,9 +214,15 @@ async function resolveAuthorizedUserToken(
   return requestToken(tokenUrl, body);
 }
 
-function createJwtAssertion(creds: ServiceAccountCreds, scopes: string[], tokenUrl: string): string {
+function createJwtAssertion(
+  creds: ServiceAccountCreds,
+  scopes: string[],
+  tokenUrl: string,
+): string {
   if (scopes.length === 0) {
-    throw new AuthError("OAuth scopes are required for service account credentials.");
+    throw new AuthError(
+      "OAuth scopes are required for service account credentials.",
+    );
   }
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "RS256", typ: "JWT" };
@@ -197,9 +258,13 @@ async function resolveServiceAccountToken(
 
 async function resolveOAuthAuth(opts: ResolveAuthOptions): Promise<GeminiAuth> {
   const env = opts.env ?? process.env;
-  const envToken = env.GEMINI_MCP_OAUTH_TOKEN ?? env.GOOGLE_OAUTH_ACCESS_TOKEN;
-  if (envToken && envToken.trim()) {
-    return { type: "oauth", accessToken: envToken.trim(), source: "env_token" };
+  const envToken = resolveEnvOAuthToken(env);
+  if (envToken) {
+    return {
+      type: "oauth",
+      accessToken: envToken.accessToken,
+      source: "env_token",
+    };
   }
 
   const credentialsPath = resolveAdcPath(env);
@@ -210,45 +275,96 @@ async function resolveOAuthAuth(opts: ResolveAuthOptions): Promise<GeminiAuth> {
   }
 
   const raw = readJsonFile(credentialsPath);
-  if (!isPlainObject(raw)) {
+  if (!isRecord(raw)) {
     throw new AuthError(`Invalid OAuth credentials file: ${credentialsPath}`);
   }
 
-  const tokenUrl = typeof raw.token_uri === "string" ? raw.token_uri : DEFAULT_TOKEN_URL;
+  const tokenUrl =
+    typeof raw.token_uri === "string" ? raw.token_uri : DEFAULT_TOKEN_URL;
   const scopes = opts.oauthScopes ?? [];
 
   if (raw.type === "authorized_user") {
     const creds = raw as AuthorizedUserCreds;
     const cacheKey = `${credentialsPath}|user`;
     const cached = oauthCache.get(cacheKey);
-    if (cached && cached.expiresAt && cached.expiresAt - TOKEN_EXPIRY_SKEW_MS > Date.now()) {
-      return { type: "oauth", accessToken: cached.accessToken, source: cached.source };
+    const now = Date.now();
+    if (
+      cached &&
+      cached.expiresAt &&
+      cached.expiresAt - TOKEN_EXPIRY_SKEW_MS > now
+    ) {
+      // Update lastUsedAt for LRU tracking
+      cached.lastUsedAt = now;
+      return {
+        type: "oauth",
+        accessToken: cached.accessToken,
+        source: cached.source,
+      };
     }
 
     if (!creds.client_id || !creds.client_secret || !creds.refresh_token) {
-      throw new AuthError(`OAuth credentials missing required fields: ${credentialsPath}`);
+      throw new AuthError(
+        `OAuth credentials missing required fields: ${credentialsPath}`,
+      );
     }
     const token = await resolveAuthorizedUserToken(creds, tokenUrl);
-    const expiresAt = token.expiresIn ? Date.now() + token.expiresIn * 1000 : undefined;
-    oauthCache.set(cacheKey, { accessToken: token.accessToken, expiresAt, source: "adc_user" });
-    return { type: "oauth", accessToken: token.accessToken, source: "adc_user" };
+    const expiresAt = token.expiresIn
+      ? now + token.expiresIn * 1000
+      : undefined;
+    pruneOAuthCache();
+    oauthCache.set(cacheKey, {
+      accessToken: token.accessToken,
+      expiresAt,
+      source: "adc_user",
+      lastUsedAt: now,
+    });
+    return {
+      type: "oauth",
+      accessToken: token.accessToken,
+      source: "adc_user",
+    };
   }
 
   if (raw.type === "service_account") {
     const creds = raw as ServiceAccountCreds;
     const cacheKey = `${credentialsPath}|service|${scopes.join(",")}`;
     const cached = oauthCache.get(cacheKey);
-    if (cached && cached.expiresAt && cached.expiresAt - TOKEN_EXPIRY_SKEW_MS > Date.now()) {
-      return { type: "oauth", accessToken: cached.accessToken, source: cached.source };
+    const now = Date.now();
+    if (
+      cached &&
+      cached.expiresAt &&
+      cached.expiresAt - TOKEN_EXPIRY_SKEW_MS > now
+    ) {
+      // Update lastUsedAt for LRU tracking
+      cached.lastUsedAt = now;
+      return {
+        type: "oauth",
+        accessToken: cached.accessToken,
+        source: cached.source,
+      };
     }
 
     if (!creds.client_email || !creds.private_key) {
-      throw new AuthError(`OAuth credentials missing required fields: ${credentialsPath}`);
+      throw new AuthError(
+        `OAuth credentials missing required fields: ${credentialsPath}`,
+      );
     }
     const token = await resolveServiceAccountToken(creds, scopes, tokenUrl);
-    const expiresAt = token.expiresIn ? Date.now() + token.expiresIn * 1000 : undefined;
-    oauthCache.set(cacheKey, { accessToken: token.accessToken, expiresAt, source: "adc_service_account" });
-    return { type: "oauth", accessToken: token.accessToken, source: "adc_service_account" };
+    const expiresAt = token.expiresIn
+      ? now + token.expiresIn * 1000
+      : undefined;
+    pruneOAuthCache();
+    oauthCache.set(cacheKey, {
+      accessToken: token.accessToken,
+      expiresAt,
+      source: "adc_service_account",
+      lastUsedAt: now,
+    });
+    return {
+      type: "oauth",
+      accessToken: token.accessToken,
+      source: "adc_service_account",
+    };
   }
 
   throw new AuthError(
@@ -256,7 +372,9 @@ async function resolveOAuthAuth(opts: ResolveAuthOptions): Promise<GeminiAuth> {
   );
 }
 
-export async function resolveGeminiAuth(opts: ResolveAuthOptions): Promise<GeminiAuth> {
+export async function resolveGeminiAuth(
+  opts: ResolveAuthOptions,
+): Promise<GeminiAuth> {
   const errors: string[] = [];
 
   if (opts.mode !== "apiKey") {

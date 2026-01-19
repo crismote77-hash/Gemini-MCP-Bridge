@@ -8,7 +8,13 @@ import { HELP_EXAMPLES, HELP_PARAMETERS, HELP_USAGE } from "./helpContent.js";
 
 type ServerInfo = { name: string; version: string };
 
-type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null;
+type JsonValue =
+  | Record<string, unknown>
+  | unknown[]
+  | string
+  | number
+  | boolean
+  | null;
 
 type ResourceSpec<T extends JsonValue | string> = {
   name: string;
@@ -38,7 +44,11 @@ const RESOURCE_URIS = [
   "gemini://help/examples",
 ];
 
-function registerJsonResource(server: McpServer, spec: ResourceSpec<JsonValue>, logger: Logger): void {
+function registerJsonResource(
+  server: McpServer,
+  spec: ResourceSpec<JsonValue>,
+  logger: Logger,
+): void {
   server.registerResource(
     spec.name,
     spec.uri,
@@ -61,7 +71,10 @@ function registerJsonResource(server: McpServer, spec: ResourceSpec<JsonValue>, 
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        logger.error("Failed to load discovery resource", { uri: spec.uri, error: redactString(message) });
+        logger.error("Failed to load discovery resource", {
+          uri: spec.uri,
+          error: redactString(message),
+        });
         return {
           contents: [
             {
@@ -76,7 +89,11 @@ function registerJsonResource(server: McpServer, spec: ResourceSpec<JsonValue>, 
   );
 }
 
-function registerTextResource(server: McpServer, spec: ResourceSpec<string>, logger: Logger): void {
+function registerTextResource(
+  server: McpServer,
+  spec: ResourceSpec<string>,
+  logger: Logger,
+): void {
   server.registerResource(
     spec.name,
     spec.uri,
@@ -99,7 +116,10 @@ function registerTextResource(server: McpServer, spec: ResourceSpec<string>, log
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        logger.error("Failed to load discovery resource", { uri: spec.uri, error: redactString(message) });
+        logger.error("Failed to load discovery resource", {
+          uri: spec.uri,
+          error: redactString(message),
+        });
         return {
           contents: [
             {
@@ -122,16 +142,24 @@ function buildCapabilities(config: BridgeConfig, info: ServerInfo): JsonValue {
       stdio: true,
       http: true,
     },
+    backend: config.backend,
     auth: {
       mode: config.auth.mode,
       oauthScopes: config.auth.oauthScopes,
       oauthTokenEnvVar: "GEMINI_MCP_OAUTH_TOKEN",
+      oauthTokenEnvVarAlt: "GOOGLE_OAUTH_ACCESS_TOKEN",
       googleApplicationCredentialsEnvVar: "GOOGLE_APPLICATION_CREDENTIALS",
       apiKeyEnvVar: config.auth.apiKeyEnvVar,
       apiKeyEnvVarAlt: config.auth.apiKeyEnvVarAlt,
       apiKeyFileEnvVar: config.auth.apiKeyFileEnvVar,
     },
     apiBaseUrl: config.apiBaseUrl,
+    vertex: {
+      project: config.vertex.project,
+      location: config.vertex.location,
+      publisher: config.vertex.publisher,
+      apiBaseUrl: config.vertex.apiBaseUrl,
+    },
     limits: {
       maxTokensPerRequest: config.limits.maxTokensPerRequest,
       maxInputChars: config.limits.maxInputChars,
@@ -169,48 +197,68 @@ export function registerDiscoveryResources(
   info: ServerInfo,
   logger: Logger,
 ): void {
-  registerJsonResource(server, {
-    name: "gemini_capabilities",
-    uri: "gemini://capabilities",
-    title: "Gemini MCP Capabilities",
-    description: "High-level server capabilities and defaults.",
-    mimeType: "application/json",
-    build: () => buildCapabilities(config, info),
-  }, logger);
+  registerJsonResource(
+    server,
+    {
+      name: "gemini_capabilities",
+      uri: "gemini://capabilities",
+      title: "Gemini MCP Capabilities",
+      description: "High-level server capabilities and defaults.",
+      mimeType: "application/json",
+      build: () => buildCapabilities(config, info),
+    },
+    logger,
+  );
 
-  registerJsonResource(server, {
-    name: "gemini_models",
-    uri: "gemini://models",
-    title: "Gemini MCP Models",
-    description: "Configured model defaults and generation settings.",
-    mimeType: "application/json",
-    build: () => buildModels(config),
-  }, logger);
+  registerJsonResource(
+    server,
+    {
+      name: "gemini_models",
+      uri: "gemini://models",
+      title: "Gemini MCP Models",
+      description: "Configured model defaults and generation settings.",
+      mimeType: "application/json",
+      build: () => buildModels(config),
+    },
+    logger,
+  );
 
-  registerTextResource(server, {
-    name: "gemini_help_usage",
-    uri: "gemini://help/usage",
-    title: "Gemini MCP Help: Usage",
-    description: "Quick-start usage guide for Gemini MCP Bridge.",
-    mimeType: "text/markdown",
-    build: () => HELP_USAGE,
-  }, logger);
+  registerTextResource(
+    server,
+    {
+      name: "gemini_help_usage",
+      uri: "gemini://help/usage",
+      title: "Gemini MCP Help: Usage",
+      description: "Quick-start usage guide for Gemini MCP Bridge.",
+      mimeType: "text/markdown",
+      build: () => HELP_USAGE,
+    },
+    logger,
+  );
 
-  registerTextResource(server, {
-    name: "gemini_help_parameters",
-    uri: "gemini://help/parameters",
-    title: "Gemini MCP Help: Parameters",
-    description: "Tool parameter reference.",
-    mimeType: "text/markdown",
-    build: () => HELP_PARAMETERS,
-  }, logger);
+  registerTextResource(
+    server,
+    {
+      name: "gemini_help_parameters",
+      uri: "gemini://help/parameters",
+      title: "Gemini MCP Help: Parameters",
+      description: "Tool parameter reference.",
+      mimeType: "text/markdown",
+      build: () => HELP_PARAMETERS,
+    },
+    logger,
+  );
 
-  registerTextResource(server, {
-    name: "gemini_help_examples",
-    uri: "gemini://help/examples",
-    title: "Gemini MCP Help: Examples",
-    description: "Example prompts and resource reads.",
-    mimeType: "text/markdown",
-    build: () => HELP_EXAMPLES,
-  }, logger);
+  registerTextResource(
+    server,
+    {
+      name: "gemini_help_examples",
+      uri: "gemini://help/examples",
+      title: "Gemini MCP Help: Examples",
+      description: "Example prompts and resource reads.",
+      mimeType: "text/markdown",
+      build: () => HELP_EXAMPLES,
+    },
+    logger,
+  );
 }
