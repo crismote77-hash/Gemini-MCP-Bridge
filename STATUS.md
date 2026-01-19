@@ -1,10 +1,10 @@
 # Project Status
 
-Last updated (UTC): 2026-01-19T13:43:32Z
+Last updated (UTC): 2026-01-19T14:53:15Z
 
 ## In Progress
 
-- Review documentation/codebase for inconsistencies and fix bugs per AGENTS rules.
+- None
 
 ## Pending
 
@@ -23,11 +23,12 @@ Last updated (UTC): 2026-01-19T13:43:32Z
 - Add numbered menus and multi-user MCP client setup
 - Add color-coded setup output
 - Rename MCP server display name to gemini-bridge and update CLI docs examples
+- Review documentation/codebase for inconsistencies and fix bugs per AGENTS rules.
+- Ignore .serena metadata in git and remove tracked files
 
 ## Verification Snapshot
 
-Last verified (UTC): 2026-01-19T13:43:32Z
+Last verified (UTC): 2026-01-19T14:53:15Z
 
-- Not run (setup wizard menu + multi-user update)
-- Not run (server name + docs update)
-- Not run (setup wizard color output)
+- npm test
+- Not run (gitignore cleanup)

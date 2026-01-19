@@ -52,3 +52,11 @@ Start using `npm run runbook:note -- "..."` to append entries.
 
 - Refined setup wizard color usage for tips/warnings and numbered prompts; verification: not run; next: run npm run setup
 
+## 2026-01-19T14:34:49Z
+
+- Fixed docs/code inconsistencies (listModels fallback, server name default, vertex env support), updated docs/base URLs and tests; verification: npm test; next: none
+
+## 2026-01-19T14:53:26Z
+
+- Ignored .serena in git and removed tracked metadata files; verification not run
+

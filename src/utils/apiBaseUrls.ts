@@ -13,7 +13,7 @@ export function resolveVertexApiBaseUrl(config: BridgeConfig): string {
     throw new ConfigError(
       [
         "Vertex backend requires a project and location.",
-        "Set GEMINI_MCP_VERTEX_PROJECT (or GOOGLE_CLOUD_PROJECT) and GEMINI_MCP_VERTEX_LOCATION (or GOOGLE_CLOUD_LOCATION).",
+        "Set GEMINI_MCP_VERTEX_PROJECT (or GOOGLE_CLOUD_PROJECT) and GEMINI_MCP_VERTEX_LOCATION (or GOOGLE_CLOUD_LOCATION or CLOUDSDK_COMPUTE_REGION).",
       ].join(" "),
     );
   }

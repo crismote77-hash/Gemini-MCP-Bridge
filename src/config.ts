@@ -343,7 +343,9 @@ export function loadConfig(
     };
 
   const vertexLocation =
-    env.GEMINI_MCP_VERTEX_LOCATION ?? env.GOOGLE_CLOUD_LOCATION;
+    env.GEMINI_MCP_VERTEX_LOCATION ??
+    env.GOOGLE_CLOUD_LOCATION ??
+    env.CLOUDSDK_COMPUTE_REGION;
   if (vertexLocation)
     merged.vertex = {
       ...(merged.vertex as object),

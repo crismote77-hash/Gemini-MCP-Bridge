@@ -135,6 +135,8 @@ function printHelp(info: { name: string; version: string }): void {
   process.stdout.write(
     `  gemini-mcp-bridge --doctor [--config path] [--check-api]\n`,
   );
+  process.stdout.write(`  gemini-mcp-bridge --version\n`);
+  process.stdout.write(`  gemini-mcp-bridge --help\n`);
   process.stdout.write(`\n`);
 }
 
@@ -199,7 +201,7 @@ async function runDoctor(
     });
     if (primaryApiBaseUrlError) {
       nextSteps.push(
-        "Set GEMINI_MCP_VERTEX_PROJECT (or GOOGLE_CLOUD_PROJECT) and GEMINI_MCP_VERTEX_LOCATION (or GOOGLE_CLOUD_LOCATION), or set GEMINI_MCP_VERTEX_API_BASE_URL.",
+        "Set GEMINI_MCP_VERTEX_PROJECT (or GOOGLE_CLOUD_PROJECT) and GEMINI_MCP_VERTEX_LOCATION (or GOOGLE_CLOUD_LOCATION or CLOUDSDK_COMPUTE_REGION), or set GEMINI_MCP_VERTEX_API_BASE_URL.",
       );
     }
   }

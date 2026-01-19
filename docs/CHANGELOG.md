@@ -66,6 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Duplicate `isRecord` type guard functions consolidated into shared `utils/typeGuards.ts`
 - Duplicate `ToolDependencies` type definitions consolidated (tools/index.ts extends utils/toolHelpers.ts)
 - Unused `estimateTokens` function and `tokenEstimate.ts` file removed
+- `gemini_list_models` fallback responses now return curated data as a non-error with an explicit warning.
+- `configure-mcp-users.mjs` now defaults to the `gemini-bridge` server name to match discovery output.
+- Vertex location resolution now honors `CLOUDSDK_COMPUTE_REGION` (in addition to `GEMINI_MCP_VERTEX_LOCATION` and `GOOGLE_CLOUD_LOCATION`).
 
 ## [0.1.0] - TBD
 

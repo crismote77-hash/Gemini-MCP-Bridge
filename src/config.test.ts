@@ -1,8 +1,14 @@
+import os from "node:os";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { loadConfig } from "./config.js";
 
 describe("loadConfig", () => {
   const originalEnv = process.env;
+
+  const unusedConfigPath = () =>
+    path.join(os.tmpdir(), `gemini-mcp-bridge-test-${randomUUID()}.json`);
 
   afterEach(() => {
     process.env = originalEnv;
@@ -10,7 +16,7 @@ describe("loadConfig", () => {
   });
 
   it("should return default values when no config is provided", () => {
-    const config = loadConfig({ env: {} });
+    const config = loadConfig({ env: {}, configPath: unusedConfigPath() });
     expect(config.backend).toBe("developer");
     expect(config.apiBaseUrl).toBe(
       "https://generativelanguage.googleapis.com/v1beta",
@@ -30,6 +36,7 @@ describe("loadConfig", () => {
       env: {
         GEMINI_MCP_TIMEOUT_MS: "60000",
       },
+      configPath: unusedConfigPath(),
     });
     expect(config.timeoutMs).toBe(60000);
   });
@@ -40,6 +47,7 @@ describe("loadConfig", () => {
         env: {
           GEMINI_MCP_TIMEOUT_MS: "invalid",
         },
+        configPath: unusedConfigPath(),
       });
     }).toThrow("Invalid integer for GEMINI_MCP_TIMEOUT_MS");
   });
@@ -49,6 +57,7 @@ describe("loadConfig", () => {
       env: {
         GEMINI_MCP_MODEL: "gemini-pro-vision",
       },
+      configPath: unusedConfigPath(),
     });
     expect(config.model).toBe("gemini-pro-vision");
   });
@@ -60,6 +69,7 @@ describe("loadConfig", () => {
         GEMINI_MCP_VERTEX_PROJECT: "my-project",
         GEMINI_MCP_VERTEX_LOCATION: "us-central1",
       },
+      configPath: unusedConfigPath(),
     });
     expect(config.backend).toBe("vertex");
     expect(config.vertex.project).toBe("my-project");

@@ -8,6 +8,7 @@ import { textBlock } from "../utils/textBlock.js";
 import { formatUsageFooter } from "../utils/usageFooter.js";
 import { sortModelsNewToOld } from "../utils/modelSort.js";
 import { isRecord } from "../utils/typeGuards.js";
+import { redactString } from "../utils/redact.js";
 import {
   listCuratedGeminiModels,
   type CuratedModelFilter,
@@ -108,7 +109,9 @@ export function createListModelsHandler(deps: Dependencies) {
         await deps.dailyBudget.commit("gemini_list_models", 0);
         const usage = await deps.dailyBudget.getUsage();
         const usageFooter = formatUsageFooter(0, usage);
-        const message = error instanceof Error ? error.message : String(error);
+        const message = redactString(
+          error instanceof Error ? error.message : String(error),
+        );
         const payload = {
           source: "curated",
           filter: "all",
@@ -117,9 +120,11 @@ export function createListModelsHandler(deps: Dependencies) {
           models: curated,
         };
         return {
-          isError: true,
           content: [
             textBlock(`${JSON.stringify(payload, null, 2)}\n\n${usageFooter}`),
+            textBlock(
+              `Warning: Gemini API listModels failed (${message}). Returned curated metadata instead.`,
+            ),
           ],
         };
       }

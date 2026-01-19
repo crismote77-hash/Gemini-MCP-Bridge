@@ -78,10 +78,10 @@ If a key file is used, ensure it is locked down (e.g., `chmod 600 /path/to/key`)
 
 Gemini MCP Bridge can call either:
 
-- **Gemini Developer API** (default): `https://generativelanguage.googleapis.com`
+- **Gemini Developer API** (default): `https://generativelanguage.googleapis.com/v1beta`
   - Works with **API keys**.
   - OAuth user tokens often lack the required `generative-language` scope unless you logged in with that scope.
-- **Vertex AI**: `https://{location}-aiplatform.googleapis.com`
+- **Vertex AI**: `https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/{publisher}`
   - Works well with **OAuth/ADC (subscription / gcloud)** tokens (`cloud-platform` scope).
   - Requires a Google Cloud project + location.
 
@@ -91,8 +91,8 @@ Select backend:
 
 Vertex configuration (when `GEMINI_MCP_BACKEND=vertex`):
 
-- `export GEMINI_MCP_VERTEX_PROJECT=...` (or `GOOGLE_CLOUD_PROJECT`)
-- `export GEMINI_MCP_VERTEX_LOCATION=...` (or `GOOGLE_CLOUD_LOCATION`, e.g. `us-central1`)
+- `export GEMINI_MCP_VERTEX_PROJECT=...` (or `GOOGLE_CLOUD_PROJECT` or `CLOUDSDK_CORE_PROJECT`)
+- `export GEMINI_MCP_VERTEX_LOCATION=...` (or `GOOGLE_CLOUD_LOCATION` or `CLOUDSDK_COMPUTE_REGION`, e.g. `us-central1`)
 - Optional:
   - `export GEMINI_MCP_VERTEX_PUBLISHER=google`
   - `export GEMINI_MCP_VERTEX_API_BASE_URL=...` (override computed Vertex base URL)

@@ -35,8 +35,8 @@ src/
 - Default config path: `~/.gemini-mcp-bridge/config.json` (override with `--config`)
 - CLI flags: `--stdio` (default), `--http`, `--http-host`, `--http-port`, `--doctor`, `--check-api`, `--print-config`
 - Backends:
-  - `developer` (default): Gemini Developer API (`https://generativelanguage.googleapis.com`)
-  - `vertex`: Vertex AI (`https://{location}-aiplatform.googleapis.com`) + project/location required
+  - `developer` (default): Gemini Developer API (`https://generativelanguage.googleapis.com/v1beta`)
+  - `vertex`: Vertex AI (`https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/{publisher}`) + project/location required
 
 ## Architecture
 

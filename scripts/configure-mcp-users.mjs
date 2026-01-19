@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const DEFAULT_SERVER_NAME = "gemini";
+const DEFAULT_SERVER_NAME = "gemini-bridge";
 const DEFAULT_COMMAND = "gemini-mcp-bridge";
 const DEFAULT_ARGS = ["--stdio"];
 
@@ -90,7 +90,9 @@ function printHelp() {
   process.stdout.write(`  --no-codex             Skip Codex CLI config\n`);
   process.stdout.write(`  --no-claude-desktop    Skip Claude Desktop config\n`);
   process.stdout.write(`  --no-claude-code       Skip Claude Code config\n`);
-  process.stdout.write(`  --server-name <name>   MCP server name (default: gemini)\n`);
+  process.stdout.write(
+    `  --server-name <name>   MCP server name (default: gemini-bridge)\n`,
+  );
   process.stdout.write(`  --command <cmd>        Command (default: gemini-mcp-bridge)\n`);
 }
 
