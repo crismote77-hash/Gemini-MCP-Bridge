@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated (UTC): 2026-01-19T20:01:04Z
+Last updated (UTC): 2026-01-19T20:10:12Z
 
 ## In Progress
 
@@ -29,10 +29,11 @@ Last updated (UTC): 2026-01-19T20:01:04Z
 - Improve non-JSON Gemini API error handling (avoid confusing JSON parse errors).
 - Improve `gemini_generate_text` handling when no text is returned (surface block/finish reasons instead of empty output).
 - Improve `gemini_analyze_image` error messages (surface safe underlying errors like image fetch failures).
+- Retry `gemini_list_models` against alternate Vertex endpoints on 404 before falling back to curated metadata.
 
 ## Verification Snapshot
 
-Last verified (UTC): 2026-01-19T20:01:04Z
+Last verified (UTC): 2026-01-19T20:10:12Z
 
 - npm run build
 - npm test

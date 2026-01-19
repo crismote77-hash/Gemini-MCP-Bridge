@@ -255,6 +255,102 @@ export class GeminiClient {
     if (params.pageSize) search.set("pageSize", String(params.pageSize));
     if (params.pageToken) search.set("pageToken", params.pageToken);
     const path = `/models${search.toString() ? `?${search.toString()}` : ""}`;
-    return this.requestJson<T>({ method: "GET", path });
+    try {
+      return await this.requestJson<T>({ method: "GET", path });
+    } catch (error) {
+      if (
+        this.backend !== "vertex" ||
+        !(error instanceof GeminiApiError) ||
+        error.status !== 404
+      ) {
+        throw error;
+      }
+
+      for (const fallbackBaseUrl of this.vertexListModelsFallbackBaseUrls()) {
+        if (fallbackBaseUrl === this.baseUrl) continue;
+        const fallbackClient = this.cloneWithBaseUrl(fallbackBaseUrl);
+        try {
+          return await fallbackClient.requestJson<T>({ method: "GET", path });
+        } catch (fallbackError) {
+          if (
+            fallbackError instanceof GeminiApiError &&
+            fallbackError.status === 404
+          ) {
+            continue;
+          }
+          throw fallbackError;
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  private cloneWithBaseUrl(baseUrl: string): GeminiClient {
+    return new GeminiClient(
+      {
+        backend: this.backend,
+        apiKey: this.apiKey,
+        accessToken: this.accessToken,
+        allowApiKeyFallback: this.allowApiKeyFallback,
+        apiKeyFallbackBaseUrl: this.apiKeyFallbackBaseUrl,
+        baseUrl,
+        timeoutMs: this.timeoutMs,
+      },
+      this.logger,
+    );
+  }
+
+  private vertexListModelsFallbackBaseUrls(): string[] {
+    let parsed: URL;
+    try {
+      parsed = new URL(this.baseUrl);
+    } catch {
+      return [];
+    }
+
+    const host = parsed.host;
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const version = parts[0];
+
+    const idxLocations = parts.indexOf("locations");
+    const location =
+      idxLocations !== -1 ? (parts[idxLocations + 1] ?? "") : "";
+    const idxPublishers = parts.indexOf("publishers");
+    const publisher =
+      idxPublishers !== -1 ? (parts[idxPublishers + 1] ?? "") : "";
+
+    const globalHost = "aiplatform.googleapis.com";
+    const regionHost = location ? `${location}-aiplatform.googleapis.com` : host;
+
+    const versions: string[] = [];
+    if (version) versions.push(version);
+    if (version === "v1") versions.push("v1beta1");
+
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const add = (nextHost: string, pathnameParts: string[]) => {
+      const candidate = `https://${nextHost}/${pathnameParts.join("/")}`;
+      if (seen.has(candidate)) return;
+      seen.add(candidate);
+      out.push(candidate);
+    };
+
+    for (const v of versions) {
+      if (parts.length > 0) {
+        const replaced = [...parts];
+        replaced[0] = v;
+        add(regionHost, replaced);
+        add(globalHost, replaced);
+      }
+      if (location && publisher) {
+        add(regionHost, [v, "publishers", publisher]);
+        add(globalHost, [v, "publishers", publisher]);
+        add(regionHost, [v, "locations", location, "publishers", publisher]);
+        add(globalHost, [v, "locations", location, "publishers", publisher]);
+      }
+    }
+
+    return out;
   }
 }

@@ -157,6 +157,61 @@ describe("GeminiClient", () => {
     ]);
   });
 
+  it("retries Vertex listModels against alternate endpoints on 404", async () => {
+    const logger: Logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+    globalThis.fetch = vi.fn(
+      async (input: string | URL, init?: RequestInit) => {
+        const url = String(input);
+        const headers = (init?.headers ?? {}) as Record<string, string>;
+        calls.push({ url, headers });
+
+        if (calls.length === 1) {
+          expect(url).toBe(
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/p/locations/us-central1/publishers/google/models?pageSize=1",
+          );
+          expect(headers.Authorization).toBe("Bearer oauth-token");
+          return new Response("<!DOCTYPE html><html>nope</html>", {
+            status: 404,
+            headers: { "Content-Type": "text/html; charset=UTF-8" },
+          });
+        }
+
+        expect(url).toBe(
+          "https://aiplatform.googleapis.com/v1/projects/p/locations/us-central1/publishers/google/models?pageSize=1",
+        );
+        expect(headers.Authorization).toBe("Bearer oauth-token");
+        return new Response(JSON.stringify({ models: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    ) as unknown as typeof fetch;
+
+    const client = new GeminiClient(
+      {
+        backend: "vertex",
+        accessToken: "oauth-token",
+        baseUrl:
+          "https://us-central1-aiplatform.googleapis.com/v1/projects/p/locations/us-central1/publishers/google",
+        timeoutMs: 1000,
+      },
+      logger,
+    );
+
+    const result = await client.listModels<{ models: unknown[] }>({
+      pageSize: 1,
+    });
+    expect(result).toEqual({ models: [] });
+    expect(calls).toHaveLength(2);
+  });
+
   it("surfaces non-JSON responses as a GeminiApiError", async () => {
     const logger: Logger = {
       debug: vi.fn(),

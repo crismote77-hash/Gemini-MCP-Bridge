@@ -68,3 +68,7 @@ Start using `npm run runbook:note -- "..."` to append entries.
 
 - Fix empty outputs: generate_text/analyze_image now error with block/finish reasons when no text; tool errors surface redacted messages; verified: npm run build, npm test; next: re-test gemini_generate_text + gemini_analyze_image in Claude
 
+## 2026-01-19T20:10:37Z
+
+- Harden gemini_list_models on Vertex: retry alternate aiplatform endpoints on 404 before curated fallback; added test; verified: npm run build, npm test; next: re-test gemini_list_models in Codex/Claude
+
