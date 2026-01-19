@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated (UTC): 2026-01-19T14:53:15Z
+Last updated (UTC): 2026-01-19T19:38:19Z
 
 ## In Progress
 
@@ -25,10 +25,12 @@ Last updated (UTC): 2026-01-19T14:53:15Z
 - Rename MCP server display name to gemini-bridge and update CLI docs examples
 - Review documentation/codebase for inconsistencies and fix bugs per AGENTS rules.
 - Ignore .serena metadata in git and remove tracked files
+- Fix `gemini_embed_text` for Vertex backend (use Vertex embedding API).
+- Improve non-JSON Gemini API error handling (avoid confusing JSON parse errors).
 
 ## Verification Snapshot
 
-Last verified (UTC): 2026-01-19T14:53:15Z
+Last verified (UTC): 2026-01-19T19:38:19Z
 
+- npm run build
 - npm test
-- Not run (gitignore cleanup)

@@ -120,4 +120,69 @@ describe("GeminiClient", () => {
       "https://example.com/models/gemini-3-pro-preview:generateContent",
     ]);
   });
+
+  it("supports Vertex-style predict calls", async () => {
+    const logger: Logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const calls: Array<{ url: string; method?: string }> = [];
+    globalThis.fetch = vi.fn(
+      async (input: string | URL, init?: RequestInit) => {
+        calls.push({ url: String(input), method: init?.method });
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    ) as unknown as typeof fetch;
+
+    const client = new GeminiClient(
+      { apiKey: "api-key", baseUrl: "https://example.com", timeoutMs: 1000 },
+      logger,
+    );
+
+    const result = await client.predict<{ ok: boolean }>("text-embedding-004", {
+      instances: [{ content: "hello" }],
+    });
+    expect(result.ok).toBe(true);
+    expect(calls).toEqual([
+      {
+        url: "https://example.com/models/text-embedding-004:predict",
+        method: "POST",
+      },
+    ]);
+  });
+
+  it("surfaces non-JSON responses as a GeminiApiError", async () => {
+    const logger: Logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+
+    globalThis.fetch = vi.fn(async () => {
+      return new Response("<!DOCTYPE html><html>nope</html>", {
+        status: 404,
+        headers: { "Content-Type": "text/html" },
+      });
+    }) as unknown as typeof fetch;
+
+    const client = new GeminiClient(
+      { apiKey: "api-key", baseUrl: "https://example.com", timeoutMs: 1000 },
+      logger,
+    );
+
+    await expect(client.listModels({ pageSize: 1 })).rejects.toMatchObject({
+      name: "GeminiApiError",
+      status: 404,
+    });
+    await expect(client.listModels({ pageSize: 1 })).rejects.toThrow(
+      "Non-JSON response from Gemini API",
+    );
+  });
 });

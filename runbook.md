@@ -60,3 +60,7 @@ Start using `npm run runbook:note -- "..."` to append entries.
 
 - Ignored .serena in git and removed tracked metadata files; verification not run
 
+## 2026-01-19T19:38:36Z
+
+- Fix Vertex embeddings (gemini_embed_text uses predict) + clearer non-JSON API errors; verified: npm run build, npm test; next: re-test MCP tools in Claude/Codex
+

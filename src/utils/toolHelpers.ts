@@ -129,6 +129,7 @@ export async function createGeminiClient(
     }
     return new GeminiClient(
       {
+        backend: deps.config.backend,
         accessToken: auth.accessToken,
         apiKey: fallbackApiKey,
         allowApiKeyFallback: Boolean(fallbackApiKey),
@@ -143,6 +144,7 @@ export async function createGeminiClient(
 
   return new GeminiClient(
     {
+      backend: "developer",
       apiKey: auth.apiKey,
       baseUrl: apiKeyBaseUrl,
       timeoutMs: resolvedTimeoutMs,

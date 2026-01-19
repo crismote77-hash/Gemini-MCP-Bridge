@@ -106,6 +106,10 @@ You can also set this in `~/.gemini-mcp-bridge/config.json`:
 }
 ```
 
+### Embeddings on Vertex
+
+When `GEMINI_MCP_BACKEND=vertex`, `gemini_embed_text` uses the Vertex AI `predict` API for embedding models (Vertex does not support `:embedContent` for these models).
+
 ### Quota project warning (Vertex / gcloud)
 
 `gcloud` may print:
@@ -244,7 +248,7 @@ Advanced auth env mapping (for overriding which env vars to read credentials fro
 
 - `gemini_generate_text`: prompt + generation settings, JSON mode, grounding, safety settings, conversationId.
 - `gemini_analyze_image`: prompt + imageUrl/imageBase64 + mimeType + optional maxTokens.
-- `gemini_embed_text`: text embeddings.
+- `gemini_embed_text`: text embeddings (Vertex backend uses the Vertex `predict` API for embedding models).
 - `gemini_count_tokens`: token counting via API.
 - `gemini_list_models`: list available models (optional filter: `all|thinking|vision|grounding|json_mode` for curated metadata).
   - Curated metadata is cached under `~/.gemini-mcp-bridge/curated-models.json`.

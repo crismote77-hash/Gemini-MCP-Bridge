@@ -3,7 +3,7 @@ export const HELP_USAGE = `# Gemini MCP Bridge Help
 ## Quick Start
 - Use gemini_generate_text for core text generation.
 - Use gemini_analyze_image for multimodal prompts.
-- Use gemini_embed_text for embeddings.
+- Use gemini_embed_text for embeddings (Developer: embedContent; Vertex: predict).
 - Use gemini_count_tokens for token estimates.
 - Use gemini_list_models for available models.
 - Use gemini_get_help for built-in help.

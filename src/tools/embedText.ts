@@ -62,14 +62,17 @@ export function createEmbedTextHandler(deps: Dependencies) {
         toolDeps,
         estimatedTokens,
         async (reservation) => {
-          const response = await client.embedContent<unknown>(
-            model ?? DEFAULT_EMBED_MODEL,
-            {
-              content: {
-                parts: [{ text }],
-              },
-            },
-          );
+          const resolvedModel = model ?? DEFAULT_EMBED_MODEL;
+          const response =
+            client.backend === "vertex"
+              ? await client.predict<unknown>(resolvedModel, {
+                  instances: [{ content: text }],
+                })
+              : await client.embedContent<unknown>(resolvedModel, {
+                  content: {
+                    parts: [{ text }],
+                  },
+                });
 
           await deps.dailyBudget.commit(
             "gemini_embed_text",

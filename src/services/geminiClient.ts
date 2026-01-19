@@ -1,5 +1,7 @@
 import type { Logger } from "../logger.js";
 
+export type GeminiApiBackend = "developer" | "vertex";
+
 export type GeminiClientConfig = {
   apiKey?: string;
   accessToken?: string;
@@ -7,6 +9,7 @@ export type GeminiClientConfig = {
   timeoutMs: number;
   allowApiKeyFallback?: boolean;
   apiKeyFallbackBaseUrl?: string;
+  backend?: GeminiApiBackend;
 };
 
 export type GeminiClientNotice = {
@@ -36,6 +39,7 @@ type RequestOptions = {
 };
 
 export class GeminiClient {
+  readonly backend: GeminiApiBackend;
   private readonly apiKey?: string;
   private readonly accessToken?: string;
   private readonly baseUrl: string;
@@ -49,6 +53,11 @@ export class GeminiClient {
     this.apiKey = config.apiKey;
     this.accessToken = config.accessToken;
     this.baseUrl = config.baseUrl.replace(/\/$/, "");
+    this.backend =
+      config.backend ??
+      (this.baseUrl.includes("aiplatform.googleapis.com")
+        ? "vertex"
+        : "developer");
     this.apiKeyFallbackBaseUrl = config.apiKeyFallbackBaseUrl
       ? config.apiKeyFallbackBaseUrl.replace(/\/$/, "")
       : undefined;
@@ -104,6 +113,12 @@ export class GeminiClient {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
+    const truncate = (value: string, maxChars: number): string => {
+      const trimmed = value.trim();
+      if (trimmed.length <= maxChars) return trimmed;
+      return `${trimmed.slice(0, maxChars)}…`;
+    };
+
     const attempt = async (prefer: "oauth" | "apiKey"): Promise<T> => {
       const baseUrl =
         prefer === "apiKey" && this.apiKeyFallbackBaseUrl
@@ -118,15 +133,32 @@ export class GeminiClient {
       });
 
       const raw = await response.text();
-      const parsed = raw ? (JSON.parse(raw) as unknown) : undefined;
+      let parsed: unknown = undefined;
+      if (raw) {
+        try {
+          parsed = JSON.parse(raw) as unknown;
+        } catch {
+          const contentType = response.headers.get("content-type") ?? "";
+          const snippet = truncate(raw, 200);
+          const contentTypeLabel = contentType ? `; content-type ${contentType}` : "";
+          const snippetLabel = snippet ? ` Body starts with: ${JSON.stringify(snippet)}.` : "";
+          throw new GeminiApiError(
+            `Non-JSON response from Gemini API (HTTP ${response.status}${contentTypeLabel}).${snippetLabel}`,
+            response.status,
+            { contentType, snippet },
+          );
+        }
+      }
       if (!response.ok) {
-        const message =
-          typeof parsed === "object" && parsed && "error" in parsed
-            ? String(
-                (parsed as { error?: { message?: string } }).error?.message ??
-                  raw,
-              )
-            : raw || `HTTP ${response.status}`;
+        const message = (() => {
+          if (typeof parsed === "object" && parsed && "error" in parsed) {
+            const parsedMessage = (
+              parsed as { error?: { message?: string } }
+            ).error?.message;
+            if (parsedMessage && parsedMessage.trim()) return parsedMessage;
+          }
+          return raw ? truncate(raw, 500) : `HTTP ${response.status}`;
+        })();
         throw new GeminiApiError(message, response.status, parsed);
       }
       return parsed as T;
@@ -202,6 +234,15 @@ export class GeminiClient {
     return this.requestJson<T>({
       method: "POST",
       path: `/models/${encodeURIComponent(normalizedModel)}:embedContent`,
+      body,
+    });
+  }
+
+  async predict<T>(model: string, body: unknown): Promise<T> {
+    const normalizedModel = this.normalizeModelName(model);
+    return this.requestJson<T>({
+      method: "POST",
+      path: `/models/${encodeURIComponent(normalizedModel)}:predict`,
       body,
     });
   }

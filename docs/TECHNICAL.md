@@ -44,7 +44,7 @@ src/
 
 - Config loader (`src/config.ts`) merges defaults, optional JSON config, and env overrides.
 - Auth resolver (`src/auth/resolveAuth.ts`) resolves OAuth tokens (ADC) or API keys.
-- Gemini client (`src/services/geminiClient.ts`) wraps REST endpoints and error handling.
+- Gemini client (`src/services/geminiClient.ts`) wraps REST endpoints (generateContent/countTokens/listModels/embedContent/predict) and error handling.
 - Tool handlers (`src/tools/*`) map MCP tools to Gemini API requests.
 - Resources (`src/resources/*`) expose usage + discovery metadata.
 - Rate limiting and budgets (`src/limits/*`) prevent runaway costs.
@@ -53,7 +53,7 @@ src/
 
 1. MCP client calls a tool (e.g., `gemini_generate_text`).
 2. Tool validates inputs and enforces rate limits and budgets.
-3. Tool builds a Gemini API request (generateContent/countTokens/listModels/embedContent).
+3. Tool builds a Gemini API request (generateContent/countTokens/listModels/embedContent; Vertex embeddings use predict).
 4. Response is parsed and returned as MCP text blocks with a usage footer.
 
 ### Conversation Memory
