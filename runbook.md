@@ -72,3 +72,7 @@ Start using `npm run runbook:note -- "..."` to append entries.
 
 - Harden gemini_list_models on Vertex: retry alternate aiplatform endpoints on 404 before curated fallback; added test; verified: npm run build, npm test; next: re-test gemini_list_models in Codex/Claude
 
+## 2026-01-19T21:19:29Z
+
+- Added daily Gemini API radar (GitHub Actions) to diff /v1beta/models and open an issue; verified: npm run build, npm test; next: add GEMINI_API_KEY secret in GitHub and verify scheduled run
+

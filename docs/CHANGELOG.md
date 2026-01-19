@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP prompts: code_review, explain_with_thinking, creative_writing
 - Curated Gemini model metadata for filtered listings
 - Daily auto-refresh for curated Gemini model metadata cache
+- Daily GitHub Actions “radar” that detects Gemini API model/capability changes and auto-opens a GitHub issue
 - Rate limiter + daily token budget (optional shared Redis)
 - Vertex backend (`GEMINI_MCP_BACKEND=vertex`) for Gemini via Vertex AI using OAuth/ADC (subscription / gcloud), with Developer API key fallback support in `auto` mode
 - Tools: gemini_generate_text, gemini_analyze_image, gemini_embed_text, gemini_count_tokens, gemini_list_models, gemini_get_help

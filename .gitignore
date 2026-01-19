@@ -6,3 +6,4 @@ dist/
 coverage/
 .vscode/
 .serena/
+.radar_cache/

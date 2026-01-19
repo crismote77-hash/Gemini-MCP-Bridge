@@ -275,3 +275,14 @@ Advanced auth env mapping (for overriding which env vars to read credentials fro
 - `gemini://capabilities`: server capabilities and limits.
 - `gemini://models`: configured defaults.
 - `gemini://help/*`: usage, parameters, examples.
+
+## Maintainers: Daily Gemini API radar (GitHub)
+
+This repo includes a daily GitHub Actions workflow that watches the Gemini
+Developer API model list and opens a GitHub issue when models/capabilities
+change.
+
+To enable it:
+
+1. Add a repo secret `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) in GitHub settings.
+2. Ensure GitHub Actions are enabled (workflow: “Gemini API radar”).

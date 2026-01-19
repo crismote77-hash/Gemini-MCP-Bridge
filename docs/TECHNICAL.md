@@ -108,3 +108,27 @@ npm run lint
 - Enforce max input sizes and image byte caps.
 - Prefer header-based API keys (x-goog-api-key) to avoid URL leakage.
 - Treat JSON mode output as untrusted; clients should validate schemas.
+
+## Maintenance Automation
+
+### Daily Gemini API radar (GitHub Actions)
+
+The repository includes a daily GitHub Actions workflow that checks the Gemini
+Developer API model list (`/v1beta/models`) and diffs:
+
+- Model additions/removals
+- `supportedGenerationMethods` changes per model
+
+When a meaningful change is detected (and a previous baseline exists), it opens
+a GitHub issue labeled `gemini-api-radar` with a short summary and a link to the
+workflow run (which uploads `radar-report.json` as an artifact).
+
+Enable it:
+
+- Add a repo secret `GEMINI_API_KEY` (or `GOOGLE_API_KEY`)
+- Ensure GitHub Actions are enabled
+
+Files:
+
+- Workflow: `.github/workflows/gemini-api-radar.yml`
+- Script: `scripts/gemini-api-radar.mjs` (writes `.radar_cache/` which is gitignored)
