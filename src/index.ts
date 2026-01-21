@@ -484,6 +484,8 @@ async function main(): Promise<void> {
   const httpHost = cmd.httpHost ?? config.transport.http.host;
   const httpPort = cmd.httpPort ?? config.transport.http.port;
   const logger = createStderrLogger({ debugEnabled: config.logging.debug });
+  const traceStartup = process.env.GEMINI_MCP_TRACE_STARTUP === "1";
+  const exitOnStdin = process.env.GEMINI_MCP_EXIT_ON_STDIN !== "0";
 
   const sharedLimitStore = await createSharedLimitStore({
     enabled: config.limits.shared.enabled,
@@ -506,6 +508,22 @@ async function main(): Promise<void> {
   const sharedDeps = { config, logger, rateLimiter, dailyBudget };
 
   let closeServer: (() => Promise<void>) | null = null;
+  let keepAliveTimer: NodeJS.Timeout | null = null;
+
+  const logStdinState = (label: string) => {
+    if (!traceStartup) return;
+    logger.info(`stdin ${label}`, {
+      isTTY: process.stdin.isTTY ?? false,
+      readable: process.stdin.readable,
+      readableEnded: process.stdin.readableEnded,
+      destroyed: process.stdin.destroyed,
+      readableFlowing: process.stdin.readableFlowing ?? null,
+      fd:
+        typeof (process.stdin as unknown as { fd?: number }).fd === "number"
+          ? (process.stdin as unknown as { fd: number }).fd
+          : null,
+    });
+  };
 
   if (transportMode === "http") {
     const httpHandle = await startHttpServer(sharedDeps, pkg, {
@@ -526,6 +544,17 @@ async function main(): Promise<void> {
       version: pkg.version,
     });
     process.stdin.resume();
+    logStdinState("resume");
+    if (traceStartup) {
+      let dataEvents = 0;
+      process.stdin.on("data", (chunk) => {
+        if (dataEvents < 3) {
+          logger.info("stdin data", { bytes: chunk.length });
+        }
+        dataEvents += 1;
+      });
+    }
+    keepAliveTimer = setInterval(() => {}, 60_000);
     closeServer = async () => {
       await server.close();
     };
@@ -537,6 +566,10 @@ async function main(): Promise<void> {
     shuttingDown = true;
     logger.info("Shutting down", { signal });
     try {
+      if (keepAliveTimer) {
+        clearInterval(keepAliveTimer);
+        keepAliveTimer = null;
+      }
       if (closeServer) await closeServer();
       if (sharedLimitStore) await sharedLimitStore.close();
     } catch (error) {
@@ -550,6 +583,22 @@ async function main(): Promise<void> {
 
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  if (transportMode === "stdio") {
+    process.stdin.on("end", () => {
+      logStdinState("end");
+      if (exitOnStdin) void shutdown("stdin_end");
+    });
+    process.stdin.on("close", () => {
+      logStdinState("close");
+      if (exitOnStdin) void shutdown("stdin_close");
+    });
+    process.stdin.on("error", (error) => {
+      if (!traceStartup) return;
+      logger.warn("stdin error", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
 }
 
 main().catch((err) => {

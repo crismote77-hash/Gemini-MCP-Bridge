@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated (UTC): 2026-01-21T20:16:11Z
+Last updated (UTC): 2026-01-21T20:51:52Z
 
 ## In Progress
 
@@ -64,9 +64,11 @@ Last updated (UTC): 2026-01-21T20:16:11Z
 - Attempt tool-smoke without debug and with custom image override (both runs ended with connection closed).
 - Investigate tool-smoke connection closed with trace/capture; connect fails with connection closed, server exits code 0, spawn args correct, no stderr output.
 - Document tool-smoke env overrides and trace/capture in TECHNICAL.md.
+- Investigate stdio connect failures: stdin ends immediately after resume (trace shows readableEnded true); disabling stdin shutdown yields request timeouts. Likely stdin EOF in non-interactive env.
 
 ## Verification Snapshot
 
-Last verified (UTC): 2026-01-21T18:23:02Z
+Last verified (UTC): 2026-01-21T20:51:52Z
 
-- TOOL_SMOKE_TRACE=1 GEMINI_MCP_AUTH_FALLBACK=auto node scripts/tool-smoke.mjs (failed: connection closed)
+- npm run build
+- node --input-type=module -e "Client + StdioClientTransport connect test" (failed: stdin_end -> request timeout)

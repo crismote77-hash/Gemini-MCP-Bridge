@@ -147,6 +147,8 @@ Common env overrides:
 - `TOOL_SMOKE_TRACE=1` to trace client steps and include a tail of server stderr in the JSON report.
 - `TOOL_SMOKE_CAPTURE_STDERR=1` to include the stderr tail without trace messages.
 - `TOOL_SMOKE_IMAGE_URL=...` or `TOOL_SMOKE_IMAGE_BASE64=...` (with `TOOL_SMOKE_IMAGE_MIME`) to override the default image.
+- `GEMINI_MCP_TRACE_STARTUP=1` to log stdio startup state (stdin flags, end/close events) for diagnosing early disconnects.
+- `GEMINI_MCP_EXIT_ON_STDIN=0` to suppress auto-exit on stdin end during debugging (not recommended outside diagnostics).
 
 ## Setup Wizard
 

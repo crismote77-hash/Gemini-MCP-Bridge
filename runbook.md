@@ -219,3 +219,7 @@ Start using `npm run runbook:note -- "..."` to append entries.
 
 - Documented tool-smoke env overrides/trace in TECHNICAL.md; committed and pushed (Add tool smoke harness and tests). Verification: not run.
 
+## 2026-01-21T20:51:17Z
+
+- Investigated stdio connection closed: added trace startup logging + optional stdin-exit override. Traces show stdin ends immediately after resume (readableEnded=true), even when spawned via StdioClientTransport; disabling stdin shutdown (GEMINI_MCP_EXIT_ON_STDIN=0) just causes client request timeout. Likely stdin EOF in non-interactive env; stdio not viable here without PTY/HTTP fallback.
+

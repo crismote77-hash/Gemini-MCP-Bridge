@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Default API key file discovery (`~/.gemini-mcp-bridge/api-key` and `/etc/gemini-mcp-bridge/api-key`) and fallback policy control (`auto|prompt|never`).
 - Vertex quota project routing via `vertex.quotaProject` / `GEMINI_MCP_VERTEX_QUOTA_PROJECT` (adds `x-goog-user-project` header).
 - Budget approval prompts and `gemini-mcp-bridge --approve-budget` for incremental daily budget increases.
+- Diagnostic startup tracing envs: `GEMINI_MCP_TRACE_STARTUP` and `GEMINI_MCP_EXIT_ON_STDIN`.
 
 ### Changed
 
@@ -96,6 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `gemini_list_models` fallback responses now return curated data as a non-error with an explicit warning.
 - `configure-mcp-users.mjs` now defaults to the `gemini-bridge` server name to match discovery output.
 - Vertex location resolution now honors `CLOUDSDK_COMPUTE_REGION` (in addition to `GEMINI_MCP_VERTEX_LOCATION` and `GOOGLE_CLOUD_LOCATION`).
+- Stdio server now keeps the process alive until stdin closes to prevent early exits during client initialization.
 
 ## [0.1.0] - TBD
 
