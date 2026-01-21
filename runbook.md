@@ -215,3 +215,7 @@ Start using `npm run runbook:note -- "..."` to append entries.
 
 - Investigated tool-smoke connection closed: added trace/capture + spawn args. TOOL_SMOKE_TRACE=1 GEMINI_MCP_AUTH_FALLBACK=auto node scripts/tool-smoke.mjs fails at client.connect (~400ms) with connection closed; transport close fires; child exit code=0, spawnargs=[node dist/index.js --stdio], server stderr empty. Suggests server exits cleanly during init (no output).
 
+## 2026-01-21T20:16:03Z
+
+- Documented tool-smoke env overrides/trace in TECHNICAL.md; committed and pushed (Add tool smoke harness and tests). Verification: not run.
+
