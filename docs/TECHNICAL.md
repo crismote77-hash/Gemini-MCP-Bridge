@@ -93,7 +93,7 @@ Discoverability:
 
 - `gemini_generate_text`: prompt, model, temperature/topK/topP/maxTokens, systemInstruction, jsonMode/strictJson/jsonSchema, grounding/includeGroundingMetadata, safetySettings, conversationId.
 - `gemini_generate_text_stream`: streaming variant of `gemini_generate_text` (progress notifications when requested by the client).
-- `gemini_generate_json`: strict JSON output (returns parsed JSON via `structuredContent`).
+- `gemini_generate_json`: strict JSON output (returns parsed JSON via `structuredContent`; clients should validate as needed).
 - `gemini_analyze_image`: prompt + imageUrl/imageBase64 + mimeType; optional model/maxTokens.
 - `gemini_embed_text`: text + optional model.
 - `gemini_embed_text_batch`: texts[] + optional model.
@@ -135,6 +135,18 @@ npm run build
 npm test
 npm run lint
 ```
+
+## Tool Smoke
+
+`scripts/tool-smoke.mjs` runs a live MCP client against the stdio server and exercises all tools, resources, and prompts.
+
+Common env overrides:
+
+- `GEMINI_MCP_AUTH_FALLBACK=auto` to allow API key fallback during live checks.
+- `TOOL_SMOKE_DEBUG=1` to enable server debug logging.
+- `TOOL_SMOKE_TRACE=1` to trace client steps and include a tail of server stderr in the JSON report.
+- `TOOL_SMOKE_CAPTURE_STDERR=1` to include the stderr tail without trace messages.
+- `TOOL_SMOKE_IMAGE_URL=...` or `TOOL_SMOKE_IMAGE_BASE64=...` (with `TOOL_SMOKE_IMAGE_MIME`) to override the default image.
 
 ## Setup Wizard
 

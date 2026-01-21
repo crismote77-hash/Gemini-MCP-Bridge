@@ -29,17 +29,6 @@ import {
   takeAuthFallbackWarnings,
 } from "../utils/toolHelpers.js";
 
-const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
-  z.union([
-    z.record(jsonValueSchema),
-    z.array(jsonValueSchema),
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-  ]),
-);
-
 const safetySettingSchema = z.object({
   category: z.string(),
   threshold: z.string(),
@@ -113,7 +102,6 @@ export function registerGenerateJsonTool(
         conversationId: z.string().optional(),
         safetySettings: z.array(safetySettingSchema).optional(),
       },
-      outputSchema: jsonValueSchema,
     },
     createGenerateJsonHandler(deps),
   );

@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated (UTC): 2026-01-21T15:30:50Z
+Last updated (UTC): 2026-01-21T20:15:24Z
 
 ## In Progress
 
@@ -53,12 +53,20 @@ Last updated (UTC): 2026-01-21T15:30:50Z
 - Enable Claude Code workspace roots for current user and run doctor check (quota project missing).
 - Add global API key file discovery, prompt fallback policy, system key storage option, and Vertex quota project header; update setup/docs/tests.
 - [completed] Add daily budget approval prompts + approvals file + CLI hook. DoD: npm test -- src/limits/dailyTokenBudget.test.ts src/limits/budgetApprovals.test.ts; Planner/Critic/Verifier: prompt policy + approvals file + CLI, ensure no secrets, tests passed.
+- Installed app globally and configured Codex/Gemini CLI for user `crismote` (root: `/home/crismote`).
+- Run local verification (build/lint/test) for tools/features.
+- Add unit tests for remaining tools/aliases and rerun npm test.
+- Run live tool checks across gemini_* and llm_* (see runbook for failures).
+- Tune tool-smoke inputs and add roots handling + image URL overrides.
+- Remove gemini_generate_json output schema to avoid MCP output validation bug; update docs.
+- Run full tool + feature verification (unit + live) with tool-smoke failures documented (JSON schema + analyze_image max tokens).
+- Tune tool-smoke JSON schema prompts + retry, adjust analyze_image prompt/maxTokens/default image; rerun tool-smoke (pass).
+- Attempt tool-smoke without debug and with custom image override (both runs ended with connection closed).
+- Investigate tool-smoke connection closed with trace/capture; connect fails with connection closed, server exits code 0, spawn args correct, no stderr output.
+- Document tool-smoke env overrides and trace/capture in TECHNICAL.md.
 
 ## Verification Snapshot
 
-Last verified (UTC): 2026-01-21T15:30:50Z
+Last verified (UTC): 2026-01-21T18:23:02Z
 
-- npm run build
-- npm run lint
-- npm test -- src/limits/dailyTokenBudget.test.ts src/limits/budgetApprovals.test.ts
-- npm test
+- TOOL_SMOKE_TRACE=1 GEMINI_MCP_AUTH_FALLBACK=auto node scripts/tool-smoke.mjs (failed: connection closed)

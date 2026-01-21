@@ -171,3 +171,47 @@ Start using `npm run runbook:note -- "..."` to append entries.
 
 - Ran full test suite; verification: npm test (all passing); next: none
 
+## 2026-01-21T15:47:08Z
+
+- Reviewed full codebase and documentation for bugs and inconsistencies; verified tests pass; updated STATUS.md timestamp.
+
+## 2026-01-21T16:03:25Z
+
+- Installed globally and configured Codex + Gemini CLI for user crismote with root=/home/crismote; verified doctor check.
+
+## 2026-01-21T16:10:04Z
+
+- Ran build/lint/test for tool verification; verification: npm run build, npm run lint, npm test; next: run live tool checks once credentials/network approved
+
+## 2026-01-21T16:19:40Z
+
+- Added unit tests for analyzeImage, generateTextStream, countTokens, listModels, getHelp, conversation tools, alias tools; verification: npm test; next: optional live tool checks
+
+## 2026-01-21T16:23:04Z
+
+- Ran build and lint; verification: npm run build, npm run lint; next: optional live tool checks
+
+## 2026-01-21T16:38:27Z
+
+- Ran live tool smoke via scripts/tool-smoke.mjs; failures: gemini_generate_text + llm_generate_text (no text, finishReason=MAX_TOKENS), gemini_generate_text_stream + llm_generate_text_stream (no text), gemini_generate_json (Cannot read properties of undefined reading '_zod'), gemini_analyze_image + llm_analyze_image (Provided image is not valid), gemini_code_review + gemini_code_fix (MCP error -32601 method not found); verification: node scripts/tool-smoke.mjs; next: confirm whether to adjust smoke inputs or investigate tool issues
+
+## 2026-01-21T17:20:39Z
+
+- Enhanced tool-smoke (roots handler, debug flag, image URL override/default, JSON temps); removed gemini_generate_json outputSchema to avoid MCP output validation bug with non-object schemas; docs updated; verification: npm test; live checks: tool-smoke (quota/JSON/image failures noted)
+
+## 2026-01-21T17:28:40Z
+
+- Ran npm test and tool-smoke (debug). Failures: gemini_generate_json_schema + llm_generate_json invalid JSON; gemini_analyze_image + llm_analyze_image no text (finishReason=MAX_TOKENS). First non-debug run ended with connection closed. Verified: npm test; TOOL_SMOKE_DEBUG=1 GEMINI_MCP_AUTH_FALLBACK=auto node scripts/tool-smoke.mjs; next: decide whether to tune prompts/image or accept flake.
+
+## 2026-01-21T17:41:05Z
+
+- Updated tool-smoke: retry path + stricter JSON prompts/maxTokens; analyze_image prompt/maxTokens; new default image URL. Verified: TOOL_SMOKE_DEBUG=1 GEMINI_MCP_AUTH_FALLBACK=auto node scripts/tool-smoke.mjs (all pass). Next: none.
+
+## 2026-01-21T17:53:21Z
+
+- Ran tool-smoke without debug and with custom image URL override; both runs failed with MCP error -32000 (connection closed). Commands: GEMINI_MCP_AUTH_FALLBACK=auto node scripts/tool-smoke.mjs; GEMINI_MCP_AUTH_FALLBACK=auto TOOL_SMOKE_IMAGE_URL=https://www.gstatic.com/webp/gallery/2.jpg node scripts/tool-smoke.mjs. Next: decide whether to keep debug enabled or investigate connection close.
+
+## 2026-01-21T18:23:17Z
+
+- Investigated tool-smoke connection closed: added trace/capture + spawn args. TOOL_SMOKE_TRACE=1 GEMINI_MCP_AUTH_FALLBACK=auto node scripts/tool-smoke.mjs fails at client.connect (~400ms) with connection closed; transport close fires; child exit code=0, spawnargs=[node dist/index.js --stdio], server stderr empty. Suggests server exits cleanly during init (no output).
+

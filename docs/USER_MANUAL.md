@@ -339,7 +339,7 @@ Advanced auth env mapping (for overriding which env vars to read credentials fro
 
 - `gemini_generate_text`: core text generation (supports JSON mode + strict JSON validation, grounding metadata, conversationId).
 - `gemini_generate_text_stream`: streaming generation (progress notifications when requested by the client).
-- `gemini_generate_json`: strict JSON output via `structuredContent`.
+- `gemini_generate_json`: strict JSON output via `structuredContent` (clients should validate as needed).
 - `gemini_analyze_image`: multimodal prompts (imageUrl or imageBase64 + mimeType).
 - `gemini_embed_text`: embeddings (Developer: embedContent; Vertex: predict).
 - `gemini_embed_text_batch`: batch embeddings (best-effort per item).
