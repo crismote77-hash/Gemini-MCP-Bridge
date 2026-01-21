@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated (UTC): 2026-01-21T10:22:35Z
+Last updated (UTC): 2026-01-21T10:54:43Z
 
 ## In Progress
 
@@ -41,12 +41,12 @@ Last updated (UTC): 2026-01-21T10:22:35Z
 - Add opt-in filesystem access (repo-scoped via MCP roots; optional system mode) and compound tools for code review + diff fixes (with optional auto-apply).
 - Audit docs/codebase for inconsistencies/missing info; align help/resources/docs with filesystem tools + capabilities notes.
 - Sync AGENTS/CLAUDE + USER_MANUAL/TECHNICAL for install options and capability/limit discoverability.
+- Verify main after doc sync (npm run build/test/lint).
 
 ## Verification Snapshot
 
-Last verified (UTC): 2026-01-21T09:32:51Z
+Last verified (UTC): 2026-01-21T10:54:43Z
 
 - npm run build
 - npm test
 - npm run lint
-- No additional verification for doc-only updates (2026-01-21T10:22:35Z).

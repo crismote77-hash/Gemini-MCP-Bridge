@@ -111,3 +111,7 @@ Start using `npm run runbook:note -- "..."` to append entries.
 
 - Sync AGENTS/CLAUDE + USER_MANUAL/TECHNICAL for install options and capability/limit discoverability; verified: doc-only (no tests); next: commit + push
 
+## 2026-01-21T10:54:53Z
+
+- Verified npm run build/test/lint after doc sync; next: none
+
