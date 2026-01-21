@@ -223,3 +223,7 @@ Start using `npm run runbook:note -- "..."` to append entries.
 
 - Investigated stdio connection closed: added trace startup logging + optional stdin-exit override. Traces show stdin ends immediately after resume (readableEnded=true), even when spawned via StdioClientTransport; disabling stdin shutdown (GEMINI_MCP_EXIT_ON_STDIN=0) just causes client request timeout. Likely stdin EOF in non-interactive env; stdio not viable here without PTY/HTTP fallback.
 
+## 2026-01-21T20:52:44Z
+
+- Added stdio startup diagnostics/exit override + keepalive; updated TECHNICAL/CHANGELOG/STATUS; ran npm run build; committed and pushed.
+
