@@ -115,3 +115,59 @@ Start using `npm run runbook:note -- "..."` to append entries.
 
 - Verified npm run build/test/lint after doc sync; next: none
 
+## 2026-01-21T11:00:13Z
+
+- Attempted gemini_code_review; blocked by missing MCP roots; verification: not run; next: configure MCP roots or approve manual review
+
+## 2026-01-21T11:15:57Z
+
+- Documented MCP roots auto-root guidance and warnings across user manual/help/error messages; verification: not run; next: optionally run npm test/lint/build
+
+## 2026-01-21T11:19:39Z
+
+- Added instructions for changing MCP roots in docs/help/discovery; verification: not run; next: optionally run npm test/lint/build
+
+## 2026-01-21T11:36:08Z
+
+- Added client root config examples and auto-root setup (configure-mcp-users + setup wizard), including Gemini CLI config support; verification: not run; next: optionally run npm test/lint/build
+
+## 2026-01-21T11:43:11Z
+
+- Ran npm run build/test/lint (all passing) after fixing helpContent backtick parse error; next: decide scope/approach for configuring roots across projects
+
+## 2026-01-21T11:58:31Z
+
+- Attempted gemini_code_review; blocked by missing MCP roots; verification: not run; next: configure MCP roots or approve manual review
+
+## 2026-01-21T12:44:34Z
+
+- Add --setup CLI entrypoint and expand guided setup to store API key with consent, default Vertex auth, and repo-root wizard; update docs/help/README/CHANGELOG; verification: not run
+
+## 2026-01-21T13:01:36Z
+
+- Attempted system-wide install + all-users config; blocked by sudo password; ran npm run build; next: run sudo npm install -g /home/crismote/geminiMCPbridge and sudo node scripts/configure-mcp-users.mjs --all-users --no-codex --no-gemini-cli
+
+## 2026-01-21T13:13:04Z
+
+- Installed gemini-mcp-bridge globally and configured Claude Desktop + Claude Code for all users (no explicit roots); ran gemini-mcp-bridge --setup --backend vertex --project geminimcp-484312 --location us-central1 --non-interactive; verification: gemini-mcp-bridge --setup
+
+## 2026-01-21T13:21:32Z
+
+- Set Claude Code mcpContextUris to project paths for current user; claude desktop auto-roots needs UI + other users need update; ran gemini-mcp-bridge --doctor --check-api (ADC quota project missing)
+
+## 2026-01-21T15:01:37Z
+
+- Add default API key file discovery, fallback prompt, quota project header; update setup wizard/docs; verified: npm test -- src/services/geminiClient.test.ts src/auth/resolveAuth.test.ts; next: run gemini-mcp-bridge --doctor --check-api with cryptoking
+
+## 2026-01-21T15:23:15Z
+
+- Added budget approval prompts + approvals file + CLI; verified: npm test -- src/limits/dailyTokenBudget.test.ts src/limits/budgetApprovals.test.ts; next: run broader tests if needed
+
+## 2026-01-21T15:28:56Z
+
+- Fixed lint formatting + budget approval handler signature; verified: npm run build; npm run lint; npm test -- src/limits/dailyTokenBudget.test.ts src/limits/budgetApprovals.test.ts; next: none
+
+## 2026-01-21T15:30:59Z
+
+- Ran full test suite; verification: npm test (all passing); next: none
+

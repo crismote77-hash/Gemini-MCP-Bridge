@@ -2,12 +2,36 @@ export class BudgetError extends Error {
   name = "BudgetError";
 }
 
+export class BudgetApprovalRequiredError extends BudgetError {
+  name = "BudgetApprovalRequiredError";
+  incrementTokens: number;
+  usedTokens: number;
+  maxTokens: number;
+
+  constructor(opts: {
+    incrementTokens: number;
+    usedTokens: number;
+    maxTokens: number;
+  }) {
+    super(
+      `Token budget exceeded (${opts.usedTokens}/${opts.maxTokens}). Approval required for +${opts.incrementTokens}.`,
+    );
+    this.incrementTokens = opts.incrementTokens;
+    this.usedTokens = opts.usedTokens;
+    this.maxTokens = opts.maxTokens;
+  }
+}
+
 function utcDayKey(nowMs: number): string {
   const d = new Date(nowMs);
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
 import type { SharedLimitStore } from "./sharedStore.js";
+import {
+  approveBudgetIncrement,
+  readApprovedTokens,
+} from "./budgetApprovals.js";
 
 function parseNonNegativeNumber(value: string | null): number {
   if (!value) return 0;
@@ -21,10 +45,14 @@ export type BudgetReservation = {
 };
 
 export class DailyTokenBudget {
-  private readonly maxTokensPerDay: number;
+  private readonly baseMaxTokensPerDay: number;
+  private readonly approvalPolicy: "auto" | "prompt" | "never";
+  private readonly approvalPath?: string;
+  private readonly incrementTokens: number;
   private readonly nowMs: () => number;
   private currentDay: string;
   private usedTokens = 0;
+  private approvedTokens = 0;
   private usedCostNanoUsd = 0;
   private hasCost = false;
   private byTool: Record<
@@ -52,17 +80,25 @@ export class DailyTokenBudget {
     maxTokensPerDay: number;
     nowMs?: () => number;
     sharedStore?: SharedLimitStore;
+    approvalPolicy?: "auto" | "prompt" | "never";
+    approvalPath?: string;
+    incrementTokens?: number;
   }) {
-    this.maxTokensPerDay = opts.maxTokensPerDay;
+    this.baseMaxTokensPerDay = opts.maxTokensPerDay;
     this.nowMs = opts.nowMs ?? (() => Date.now());
     this.currentDay = utcDayKey(this.nowMs());
     this.sharedStore = opts.sharedStore;
+    this.approvalPolicy = opts.approvalPolicy ?? "prompt";
+    this.approvalPath = opts.approvalPath;
+    this.incrementTokens = Math.max(0, Math.trunc(opts.incrementTokens ?? 0));
   }
 
   async getUsage(): Promise<{
     dayUtc: string;
     usedTokens: number;
     maxTokens: number;
+    baseMaxTokens: number;
+    approvedTokens: number;
     requestCount: number;
     estimatedCostUsd?: number;
     byTool: Record<
@@ -74,6 +110,7 @@ export class DailyTokenBudget {
       return this.getSharedUsage();
     }
     this.rollIfNeeded();
+    const maxTokens = this.getEffectiveMaxTokens(this.currentDay);
     const requestCount = Object.values(this.byTool).reduce(
       (sum, entry) => sum + entry.calls,
       0,
@@ -97,7 +134,9 @@ export class DailyTokenBudget {
     return {
       dayUtc: this.currentDay,
       usedTokens: this.usedTokens,
-      maxTokens: this.maxTokensPerDay,
+      maxTokens,
+      baseMaxTokens: this.baseMaxTokensPerDay,
+      approvedTokens: this.approvedTokens,
       requestCount,
       ...(this.hasCost ? { estimatedCostUsd } : {}),
       byTool,
@@ -106,19 +145,26 @@ export class DailyTokenBudget {
 
   async checkOrThrow(): Promise<void> {
     if (this.sharedStore) {
+      const dayKey = utcDayKey(this.nowMs());
       const usedTokens = await this.getSharedTotal();
-      if (usedTokens >= this.maxTokensPerDay) {
-        throw new BudgetError(
-          `Daily token budget exceeded (${usedTokens}/${this.maxTokensPerDay}).`,
-        );
+      const maxTokens = this.getEffectiveMaxTokens(dayKey);
+      if (usedTokens >= maxTokens) {
+        if (this.maybeAutoApprove(dayKey)) {
+          const updatedMax = this.getEffectiveMaxTokens(dayKey);
+          if (usedTokens < updatedMax) return;
+        }
+        await this.handleOverBudget(usedTokens, maxTokens);
       }
       return;
     }
     this.rollIfNeeded();
-    if (this.usedTokens >= this.maxTokensPerDay) {
-      throw new BudgetError(
-        `Daily token budget exceeded (${this.usedTokens}/${this.maxTokensPerDay}).`,
-      );
+    const maxTokens = this.getEffectiveMaxTokens(this.currentDay);
+    if (this.usedTokens >= maxTokens) {
+      if (this.maybeAutoApprove(this.currentDay)) {
+        const updatedMax = this.getEffectiveMaxTokens(this.currentDay);
+        if (this.usedTokens < updatedMax) return;
+      }
+      await this.handleOverBudget(this.usedTokens, maxTokens);
     }
   }
 
@@ -129,14 +175,31 @@ export class DailyTokenBudget {
       return { tokens: 0 };
     }
     if (this.sharedStore) {
-      await this.reserveShared(normalized);
+      const dayKey = utcDayKey(this.nowMs());
+      let maxTokens = this.getEffectiveMaxTokens(dayKey);
+      try {
+        await this.reserveShared(normalized, maxTokens);
+      } catch (error) {
+        if (error instanceof BudgetError && this.maybeAutoApprove(dayKey)) {
+          maxTokens = this.getEffectiveMaxTokens(dayKey);
+          await this.reserveShared(normalized, maxTokens);
+        } else if (error instanceof BudgetError) {
+          await this.handleOverBudget(await this.getSharedTotal(), maxTokens);
+        } else {
+          throw error;
+        }
+      }
       return { tokens: normalized };
     }
     this.rollIfNeeded();
-    if (this.usedTokens + normalized > this.maxTokensPerDay) {
-      throw new BudgetError(
-        `Daily token budget exceeded (${this.usedTokens}/${this.maxTokensPerDay}).`,
-      );
+    let maxTokens = this.getEffectiveMaxTokens(this.currentDay);
+    if (this.usedTokens + normalized > maxTokens) {
+      if (this.maybeAutoApprove(this.currentDay)) {
+        maxTokens = this.getEffectiveMaxTokens(this.currentDay);
+      }
+      if (this.usedTokens + normalized > maxTokens) {
+        await this.handleOverBudget(this.usedTokens, maxTokens);
+      }
     }
     this.usedTokens += normalized;
     return { tokens: normalized };
@@ -212,13 +275,54 @@ export class DailyTokenBudget {
     if (day !== this.currentDay) {
       this.currentDay = day;
       this.usedTokens = 0;
+      this.approvedTokens = 0;
       this.usedCostNanoUsd = 0;
       this.hasCost = false;
       this.byTool = {};
     }
   }
 
-  private async reserveShared(tokens: number): Promise<void> {
+  private getEffectiveMaxTokens(dayKey: string): number {
+    if (this.approvalPath) {
+      this.approvedTokens = readApprovedTokens(this.approvalPath, dayKey);
+    } else {
+      this.approvedTokens = 0;
+    }
+    return this.baseMaxTokensPerDay + this.approvedTokens;
+  }
+
+  private async handleOverBudget(
+    usedTokens: number,
+    maxTokens: number,
+  ): Promise<never> {
+    if (this.approvalPolicy === "prompt" && this.incrementTokens > 0) {
+      throw new BudgetApprovalRequiredError({
+        incrementTokens: this.incrementTokens,
+        usedTokens,
+        maxTokens,
+      });
+    }
+    throw new BudgetError(
+      `Daily token budget exceeded (${usedTokens}/${maxTokens}).`,
+    );
+  }
+
+  private maybeAutoApprove(dayKey: string): boolean {
+    if (
+      this.approvalPolicy !== "auto" ||
+      this.incrementTokens <= 0 ||
+      !this.approvalPath
+    ) {
+      return false;
+    }
+    approveBudgetIncrement(this.approvalPath, dayKey, this.incrementTokens);
+    return true;
+  }
+
+  private async reserveShared(
+    tokens: number,
+    maxTokens: number,
+  ): Promise<void> {
     if (!this.sharedStore) return;
     const dayKey = utcDayKey(this.nowMs());
     const prefix = `${this.sharedStore.keyPrefix}:budget:${dayKey}`;
@@ -229,7 +333,7 @@ export class DailyTokenBudget {
         keys: [totalKey],
         arguments: [
           String(tokens),
-          String(this.maxTokensPerDay),
+          String(maxTokens),
           String(DailyTokenBudget.SHARED_TTL_SECONDS),
         ],
       },
@@ -239,7 +343,7 @@ export class DailyTokenBudget {
       : [0, 0];
     if (!allowed) {
       throw new BudgetError(
-        `Daily token budget exceeded (${usedTokens}/${this.maxTokensPerDay}).`,
+        `Daily token budget exceeded (${usedTokens}/${maxTokens}).`,
       );
     }
   }
@@ -309,6 +413,8 @@ export class DailyTokenBudget {
     dayUtc: string;
     usedTokens: number;
     maxTokens: number;
+    baseMaxTokens: number;
+    approvedTokens: number;
     requestCount: number;
     estimatedCostUsd?: number;
     byTool: Record<
@@ -320,7 +426,9 @@ export class DailyTokenBudget {
       return {
         dayUtc: this.currentDay,
         usedTokens: 0,
-        maxTokens: this.maxTokensPerDay,
+        maxTokens: this.getEffectiveMaxTokens(this.currentDay),
+        baseMaxTokens: this.baseMaxTokensPerDay,
+        approvedTokens: this.approvedTokens,
         requestCount: 0,
         byTool: {},
       };
@@ -366,10 +474,13 @@ export class DailyTokenBudget {
       requestCount += calls;
     }
 
+    const maxTokens = this.getEffectiveMaxTokens(dayKey);
     return {
       dayUtc: dayKey,
       usedTokens,
-      maxTokens: this.maxTokensPerDay,
+      maxTokens,
+      baseMaxTokens: this.baseMaxTokensPerDay,
+      approvedTokens: this.approvedTokens,
       requestCount,
       ...(hasCost ? { estimatedCostUsd: costNanoUsd / 1_000_000_000 } : {}),
       byTool,

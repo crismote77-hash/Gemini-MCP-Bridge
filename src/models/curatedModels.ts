@@ -257,6 +257,7 @@ export async function refreshCuratedGeminiModels(deps: {
       apiKeyEnvVar: deps.config.auth.apiKeyEnvVar,
       apiKeyEnvVarAlt: deps.config.auth.apiKeyEnvVarAlt,
       apiKeyFileEnvVar: deps.config.auth.apiKeyFileEnvVar,
+      apiKeyFilePaths: deps.config.auth.apiKeyFilePaths,
       oauthScopes: deps.config.auth.oauthScopes,
     } as const;
     const auth = await resolveGeminiAuth(authOpts);
@@ -264,7 +265,11 @@ export async function refreshCuratedGeminiModels(deps: {
     const resolvedTimeoutMs = deps.config.timeoutMs;
 
     let fallbackApiKey: string | undefined;
-    if (auth.type === "oauth" && deps.config.auth.mode === "auto") {
+    if (
+      auth.type === "oauth" &&
+      deps.config.auth.mode === "auto" &&
+      deps.config.auth.fallbackPolicy !== "never"
+    ) {
       try {
         const apiKeyAuth = await resolveGeminiAuth({
           ...authOpts,
@@ -283,7 +288,10 @@ export async function refreshCuratedGeminiModels(deps: {
         ? {
             accessToken: auth.accessToken,
             apiKey: fallbackApiKey,
-            allowApiKeyFallback: Boolean(fallbackApiKey),
+            allowApiKeyFallback:
+              deps.config.auth.fallbackPolicy === "auto" &&
+              Boolean(fallbackApiKey),
+            apiKeyFallbackPolicy: deps.config.auth.fallbackPolicy,
             baseUrl: deps.config.apiBaseUrl,
             timeoutMs: resolvedTimeoutMs,
           }

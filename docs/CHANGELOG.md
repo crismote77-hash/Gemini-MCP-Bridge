@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial project scaffolding
 - Core MCP server (stdio + optional streamable HTTP)
 - Guided setup wizard (`npm run setup`) for backend configuration and optional Vertex `gcloud` steps
+- CLI entrypoint `gemini-mcp-bridge --setup` for guided setup
 - Config loader with env overrides and strict parsing
 - Auth resolver for Gemini API keys
 - OAuth/ADC authentication with auth mode selection (oauth/apiKey/auto)
@@ -39,14 +40,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New opt-in filesystem support (repo-scoped via MCP roots; optional machine-wide “system” mode) and compound tools:
   - `gemini_code_review`: server-side repo code review without the caller sending file contents.
   - `gemini_code_fix`: returns `{ summary, diff }` and can optionally auto-apply when `filesystem.allowWrite=true`.
+- Default API key file discovery (`~/.gemini-mcp-bridge/api-key` and `/etc/gemini-mcp-bridge/api-key`) and fallback policy control (`auto|prompt|never`).
+- Vertex quota project routing via `vertex.quotaProject` / `GEMINI_MCP_VERTEX_QUOTA_PROJECT` (adds `x-goog-user-project` header).
+- Budget approval prompts and `gemini-mcp-bridge --approve-budget` for incremental daily budget increases.
 
 ### Changed
 
 - Setup wizard output now includes guided explanations, numbered menus, masked detected values, git-path warnings, optional multi-user MCP client configuration, and ANSI color cues (disable with `NO_COLOR=1`).
+- Setup wizard now defaults to Vertex sign-in with optional API key fallback, supports saving API keys with explicit consent (masked input), and can enable repo tools with auto-detected root confirmation.
+- Setup wizard now saves API keys to key files (user or system) with explicit consent and captures fallback policy + quota project.
 - MCP server now reports its name as `gemini-bridge` in discovery/handshake output.
 - Default `limits.maxTokensPerRequest` increased to 8192 (override with `GEMINI_MCP_MAX_TOKENS` / config file).
 - Tool input schemas now advertise maxTokens caps and prompt-structure hints (helps MCP clients/LLMs avoid invalid requests).
 - `gemini://capabilities` now advertises filesystem mode and the new compound review/fix tools when enabled.
+- User-facing docs/help now include client-specific root config examples, how to change roots, and setup/config scripts for auto-setting roots.
+- Setup/config scripts now include optional repo-root configuration and Gemini CLI client updates.
 - Redis connection now uses 10-second timeout with `Promise.race()` and re-throws errors instead of silently failing
 - HTTP server transport cleanup uses `Promise.allSettled()` for robust iteration
 - Rate limiter uses `filter()` instead of repeated `shift()` for efficiency, with hard cap on array size

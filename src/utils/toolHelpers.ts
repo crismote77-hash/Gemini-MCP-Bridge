@@ -143,6 +143,7 @@ export async function createGeminiClient(
     apiKeyEnvVar: deps.config.auth.apiKeyEnvVar,
     apiKeyEnvVarAlt: deps.config.auth.apiKeyEnvVarAlt,
     apiKeyFileEnvVar: deps.config.auth.apiKeyFileEnvVar,
+    apiKeyFilePaths: deps.config.auth.apiKeyFilePaths,
     oauthScopes: deps.config.auth.oauthScopes,
   } as const;
 
@@ -152,7 +153,10 @@ export async function createGeminiClient(
   if (auth.type === "oauth") {
     const primaryBaseUrl = resolvePrimaryApiBaseUrl(deps.config);
     let fallbackApiKey: string | undefined;
-    if (deps.config.auth.mode === "auto") {
+    if (
+      deps.config.auth.mode === "auto" &&
+      deps.config.auth.fallbackPolicy !== "never"
+    ) {
       try {
         const apiKeyAuth = await resolveGeminiAuth({
           ...authOpts,
@@ -170,11 +174,14 @@ export async function createGeminiClient(
         backend: deps.config.backend,
         accessToken: auth.accessToken,
         apiKey: fallbackApiKey,
-        allowApiKeyFallback: Boolean(fallbackApiKey),
+        allowApiKeyFallback:
+          deps.config.auth.fallbackPolicy === "auto" && Boolean(fallbackApiKey),
+        apiKeyFallbackPolicy: deps.config.auth.fallbackPolicy,
         apiKeyFallbackBaseUrl:
           deps.config.backend === "vertex" ? apiKeyBaseUrl : undefined,
         baseUrl: primaryBaseUrl,
         timeoutMs: resolvedTimeoutMs,
+        quotaProject: deps.config.vertex.quotaProject,
       },
       deps.logger,
     );

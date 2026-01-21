@@ -23,6 +23,7 @@ type ResolveAuthOptions = {
   apiKeyEnvVar: string;
   apiKeyEnvVarAlt: string;
   apiKeyFileEnvVar: string;
+  apiKeyFilePaths?: string[];
   oauthScopes: string[];
   env?: NodeJS.ProcessEnv;
 };
@@ -136,6 +137,19 @@ function resolveApiKeyAuth(opts: ResolveAuthOptions): GeminiAuth {
     if (!fs.existsSync(resolved)) {
       throw new AuthError(`API key file not found: ${resolved}`);
     }
+    const raw = fs.readFileSync(resolved, "utf-8").trim();
+    if (raw) {
+      return { type: "apiKey", apiKey: raw, source: "file" };
+    }
+    throw new AuthError(`API key file is empty: ${resolved}`);
+  }
+
+  const fallbackPaths = opts.apiKeyFilePaths ?? [];
+  for (const candidate of fallbackPaths) {
+    const trimmed = candidate?.trim();
+    if (!trimmed) continue;
+    const resolved = expandHome(trimmed);
+    if (!fs.existsSync(resolved)) continue;
     const raw = fs.readFileSync(resolved, "utf-8").trim();
     if (raw) {
       return { type: "apiKey", apiKey: raw, source: "file" };

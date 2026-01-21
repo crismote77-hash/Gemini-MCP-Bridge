@@ -5,6 +5,7 @@ import { isRecord } from "./utils/typeGuards.js";
 
 const transportModeSchema = z.enum(["stdio", "http"]);
 const authModeSchema = z.enum(["apiKey", "oauth", "auto"]);
+const authFallbackSchema = z.enum(["auto", "prompt", "never"]);
 const backendSchema = z.enum(["developer", "vertex"]);
 const filesystemModeSchema = z.enum(["off", "repo", "system"]);
 
@@ -14,10 +15,17 @@ const configSchema = z
     auth: z
       .object({
         mode: authModeSchema.default("auto"),
+        fallbackPolicy: authFallbackSchema.default("prompt"),
         apiKey: z.string().optional(),
         apiKeyEnvVar: z.string().default("GEMINI_API_KEY"),
         apiKeyEnvVarAlt: z.string().default("GOOGLE_API_KEY"),
         apiKeyFileEnvVar: z.string().default("GEMINI_API_KEY_FILE"),
+        apiKeyFilePaths: z
+          .array(z.string())
+          .default([
+            "~/.gemini-mcp-bridge/api-key",
+            "/etc/gemini-mcp-bridge/api-key",
+          ]),
         oauthScopes: z
           .array(z.string())
           .default(["https://www.googleapis.com/auth/generative-language"]),
@@ -30,6 +38,7 @@ const configSchema = z
       .object({
         project: z.string().optional(),
         location: z.string().optional(),
+        quotaProject: z.string().optional(),
         publisher: z.string().default("google"),
         apiBaseUrl: z.string().optional(),
       })
@@ -50,6 +59,11 @@ const configSchema = z
         maxInputChars: z.number().int().positive().default(10000),
         maxRequestsPerMinute: z.number().int().positive().default(30),
         maxTokensPerDay: z.number().int().positive().default(200000),
+        budgetIncrementTokens: z.number().int().positive().default(200000),
+        budgetApprovalPolicy: authFallbackSchema.default("prompt"),
+        budgetApprovalPath: z
+          .string()
+          .default("~/.gemini-mcp-bridge/budget-approvals.json"),
         enableCostEstimates: z.boolean().default(false),
         shared: z
           .object({
@@ -251,6 +265,11 @@ export function loadConfig(
       ...(merged.auth as object),
       mode: env.GEMINI_MCP_AUTH_MODE,
     };
+  if (env.GEMINI_MCP_AUTH_FALLBACK)
+    merged.auth = {
+      ...(merged.auth as object),
+      fallbackPolicy: env.GEMINI_MCP_AUTH_FALLBACK,
+    };
   if (env.GEMINI_MCP_API_KEY_ENV_VAR)
     merged.auth = {
       ...(merged.auth as object),
@@ -265,6 +284,11 @@ export function loadConfig(
     merged.auth = {
       ...(merged.auth as object),
       apiKeyFileEnvVar: env.GEMINI_MCP_API_KEY_FILE_ENV_VAR,
+    };
+  if (env.GEMINI_MCP_API_KEY_FILE_PATHS)
+    merged.auth = {
+      ...(merged.auth as object),
+      apiKeyFilePaths: parseListEnv(env.GEMINI_MCP_API_KEY_FILE_PATHS),
     };
   if (env.GEMINI_MCP_OAUTH_SCOPES)
     merged.auth = {
@@ -337,6 +361,24 @@ export function loadConfig(
         env.GEMINI_MCP_DAILY_TOKEN_LIMIT,
         "GEMINI_MCP_DAILY_TOKEN_LIMIT",
       ),
+    };
+  if (env.GEMINI_MCP_BUDGET_INCREMENT)
+    merged.limits = {
+      ...(merged.limits as object),
+      budgetIncrementTokens: parseIntEnv(
+        env.GEMINI_MCP_BUDGET_INCREMENT,
+        "GEMINI_MCP_BUDGET_INCREMENT",
+      ),
+    };
+  if (env.GEMINI_MCP_BUDGET_APPROVAL_POLICY)
+    merged.limits = {
+      ...(merged.limits as object),
+      budgetApprovalPolicy: env.GEMINI_MCP_BUDGET_APPROVAL_POLICY,
+    };
+  if (env.GEMINI_MCP_BUDGET_APPROVAL_PATH)
+    merged.limits = {
+      ...(merged.limits as object),
+      budgetApprovalPath: env.GEMINI_MCP_BUDGET_APPROVAL_PATH,
     };
   if (env.GEMINI_MCP_ENABLE_COST_ESTIMATES)
     merged.limits = {
@@ -434,11 +476,32 @@ export function loadConfig(
       publisher: env.GEMINI_MCP_VERTEX_PUBLISHER,
     };
 
+  const vertexQuotaProject =
+    env.GEMINI_MCP_VERTEX_QUOTA_PROJECT ?? env.GOOGLE_CLOUD_QUOTA_PROJECT;
+  if (vertexQuotaProject)
+    merged.vertex = {
+      ...(merged.vertex as object),
+      quotaProject: vertexQuotaProject,
+    };
+
   if (env.GEMINI_MCP_VERTEX_API_BASE_URL)
     merged.vertex = {
       ...(merged.vertex as object),
       apiBaseUrl: env.GEMINI_MCP_VERTEX_API_BASE_URL,
     };
+
+  if (
+    merged.backend === "vertex" &&
+    isRecord(merged.vertex) &&
+    !("quotaProject" in merged.vertex) &&
+    typeof merged.vertex.project === "string" &&
+    merged.vertex.project.trim()
+  ) {
+    merged.vertex = {
+      ...(merged.vertex as object),
+      quotaProject: merged.vertex.project,
+    };
+  }
 
   if (env.GEMINI_MCP_MAX_IMAGE_BYTES)
     merged.images = {

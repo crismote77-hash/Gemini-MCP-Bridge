@@ -9,7 +9,9 @@ export type GeminiClientConfig = {
   timeoutMs: number;
   allowApiKeyFallback?: boolean;
   apiKeyFallbackBaseUrl?: string;
+  apiKeyFallbackPolicy?: "auto" | "prompt" | "never";
   backend?: GeminiApiBackend;
+  quotaProject?: string;
 };
 
 export type GeminiClientNotice = {
@@ -32,6 +34,10 @@ export class GeminiApiError extends Error {
   }
 }
 
+export class ApiKeyFallbackPromptError extends GeminiApiError {
+  name = "ApiKeyFallbackPromptError";
+}
+
 type RequestOptions = {
   method: "GET" | "POST";
   path: string;
@@ -46,6 +52,8 @@ export class GeminiClient {
   private readonly apiKeyFallbackBaseUrl?: string;
   private readonly timeoutMs: number;
   private readonly allowApiKeyFallback: boolean;
+  private readonly apiKeyFallbackPolicy: "auto" | "prompt" | "never";
+  private readonly quotaProject?: string;
   private readonly logger: Logger;
   private notices: GeminiClientNotice[] = [];
 
@@ -63,6 +71,10 @@ export class GeminiClient {
       : undefined;
     this.timeoutMs = config.timeoutMs;
     this.allowApiKeyFallback = Boolean(config.allowApiKeyFallback);
+    this.apiKeyFallbackPolicy =
+      config.apiKeyFallbackPolicy ??
+      (this.allowApiKeyFallback ? "auto" : "never");
+    this.quotaProject = config.quotaProject?.trim() || undefined;
     this.logger = logger;
   }
 
@@ -77,6 +89,13 @@ export class GeminiClient {
     return trimmed.startsWith("models/")
       ? trimmed.slice("models/".length)
       : trimmed;
+  }
+
+  private shouldSendQuotaProject(baseUrl: string): boolean {
+    return (
+      Boolean(this.quotaProject) &&
+      baseUrl.includes("aiplatform.googleapis.com")
+    );
   }
 
   private buildHeaders(
@@ -125,9 +144,13 @@ export class GeminiClient {
           ? this.apiKeyFallbackBaseUrl
           : this.baseUrl;
       const url = new URL(baseUrl + opts.path);
+      const headers = this.buildHeaders(prefer);
+      if (this.shouldSendQuotaProject(baseUrl)) {
+        headers["x-goog-user-project"] = this.quotaProject as string;
+      }
       const response = await fetch(url.toString(), {
         method: opts.method,
-        headers: this.buildHeaders(prefer),
+        headers,
         body: opts.body ? JSON.stringify(opts.body) : undefined,
         signal: controller.signal,
       });
@@ -176,14 +199,24 @@ export class GeminiClient {
         return await attempt("oauth");
       } catch (error) {
         const primaryError = error;
-        const shouldRetry =
-          this.allowApiKeyFallback &&
+        const fallbackEligible =
           this.apiKey &&
           primaryError instanceof GeminiApiError &&
           (primaryError.status === 401 ||
             primaryError.status === 403 ||
             primaryError.status === 429 ||
             primaryError.status === 402);
+        if (fallbackEligible && this.apiKeyFallbackPolicy === "prompt") {
+          throw new ApiKeyFallbackPromptError(
+            primaryError.message,
+            primaryError.status,
+            primaryError.data,
+          );
+        }
+        const shouldRetry =
+          this.allowApiKeyFallback &&
+          this.apiKeyFallbackPolicy === "auto" &&
+          fallbackEligible;
         if (!shouldRetry) throw primaryError;
 
         this.logger.debug("Retrying Gemini API request with API key", {
@@ -254,6 +287,9 @@ export class GeminiClient {
           `/models/${encodeURIComponent(normalizedModel)}:streamGenerateContent`,
       );
       const headers = this.buildHeaders(prefer);
+      if (this.shouldSendQuotaProject(baseUrl)) {
+        headers["x-goog-user-project"] = this.quotaProject as string;
+      }
       headers.Accept = "text/event-stream";
       const response = await fetch(url.toString(), {
         method: "POST",
@@ -312,14 +348,24 @@ export class GeminiClient {
           return await start("oauth");
         } catch (error) {
           const primaryError = error;
-          const shouldRetry =
-            this.allowApiKeyFallback &&
+          const fallbackEligible =
             this.apiKey &&
             primaryError instanceof GeminiApiError &&
             (primaryError.status === 401 ||
               primaryError.status === 403 ||
               primaryError.status === 429 ||
               primaryError.status === 402);
+          if (fallbackEligible && this.apiKeyFallbackPolicy === "prompt") {
+            throw new ApiKeyFallbackPromptError(
+              primaryError.message,
+              primaryError.status,
+              primaryError.data,
+            );
+          }
+          const shouldRetry =
+            this.allowApiKeyFallback &&
+            this.apiKeyFallbackPolicy === "auto" &&
+            fallbackEligible;
           if (!shouldRetry) throw primaryError;
 
           this.logger.debug("Retrying Gemini streaming request with API key", {
@@ -530,8 +576,10 @@ export class GeminiClient {
         accessToken: this.accessToken,
         allowApiKeyFallback: this.allowApiKeyFallback,
         apiKeyFallbackBaseUrl: this.apiKeyFallbackBaseUrl,
+        apiKeyFallbackPolicy: this.apiKeyFallbackPolicy,
         baseUrl,
         timeoutMs: this.timeoutMs,
+        quotaProject: this.quotaProject,
       },
       this.logger,
     );

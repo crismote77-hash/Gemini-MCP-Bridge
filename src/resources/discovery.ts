@@ -175,6 +175,7 @@ function buildCapabilities(config: BridgeConfig, info: ServerInfo): JsonValue {
     backend: config.backend,
     auth: {
       mode: config.auth.mode,
+      fallbackPolicy: config.auth.fallbackPolicy,
       oauthScopes: config.auth.oauthScopes,
       oauthTokenEnvVar: "GEMINI_MCP_OAUTH_TOKEN",
       oauthTokenEnvVarAlt: "GOOGLE_OAUTH_ACCESS_TOKEN",
@@ -182,11 +183,13 @@ function buildCapabilities(config: BridgeConfig, info: ServerInfo): JsonValue {
       apiKeyEnvVar: config.auth.apiKeyEnvVar,
       apiKeyEnvVarAlt: config.auth.apiKeyEnvVarAlt,
       apiKeyFileEnvVar: config.auth.apiKeyFileEnvVar,
+      apiKeyFilePaths: config.auth.apiKeyFilePaths,
     },
     apiBaseUrl: config.apiBaseUrl,
     vertex: {
       project: config.vertex.project,
       location: config.vertex.location,
+      quotaProject: config.vertex.quotaProject,
       publisher: config.vertex.publisher,
       apiBaseUrl: config.vertex.apiBaseUrl,
     },
@@ -195,6 +198,8 @@ function buildCapabilities(config: BridgeConfig, info: ServerInfo): JsonValue {
       maxInputChars: config.limits.maxInputChars,
       maxRequestsPerMinute: config.limits.maxRequestsPerMinute,
       maxTokensPerDay: config.limits.maxTokensPerDay,
+      budgetIncrementTokens: config.limits.budgetIncrementTokens,
+      budgetApprovalPolicy: config.limits.budgetApprovalPolicy,
       sharedLimitsEnabled: config.limits.shared.enabled,
     },
     defaults: {
@@ -219,7 +224,10 @@ function buildCapabilities(config: BridgeConfig, info: ServerInfo): JsonValue {
       "For JSON output: set jsonMode, strictJson, or jsonSchema (strictJson/jsonSchema imply jsonMode).",
       `Total input size (prompt + systemInstruction + conversation history) is capped at limits.maxInputChars (${config.limits.maxInputChars}) for generation tools.`,
       "Filesystem tools use filesystem.maxFiles/maxFileBytes/maxTotalBytes instead of limits.maxInputChars.",
-      "For repo-scoped filesystem tools (gemini_code_review/gemini_code_fix): set filesystem.mode=repo and ensure your MCP client provides roots (roots/list).",
+      "For repo-scoped filesystem tools (gemini_code_review/gemini_code_fix): set filesystem.mode=repo and ensure your MCP client provides roots (roots/list). Many clients can auto-share the current workspace; configure a single repo root to avoid over-sharing.",
+      "Repo mode currently expects a single root. If you have multiple roots, use separate server entries per project.",
+      "To change roots, update your MCP client config or workspace root and restart the client.",
+      "From source, the setup wizard or configure-mcp-users script can set roots automatically.",
       "For auto-apply fixes: set filesystem.allowWrite=true. For machine-wide access: filesystem.mode=system requires filesystem.allowSystem=true (high risk).",
     ],
   };

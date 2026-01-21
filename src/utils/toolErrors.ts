@@ -1,8 +1,14 @@
 import { AuthError } from "../auth/resolveAuth.js";
 import { ConfigError } from "../errors.js";
-import { BudgetError } from "../limits/dailyTokenBudget.js";
+import {
+  BudgetApprovalRequiredError,
+  BudgetError,
+} from "../limits/dailyTokenBudget.js";
 import { RateLimitError as LocalRateLimitError } from "../limits/rateLimiter.js";
-import { GeminiApiError } from "../services/geminiClient.js";
+import {
+  ApiKeyFallbackPromptError,
+  GeminiApiError,
+} from "../services/geminiClient.js";
 import { redactString } from "./redact.js";
 
 export type ToolErrorInfo = { message: string };
@@ -25,8 +31,9 @@ function formatApiKeySetupGuidance(): string {
   return [
     "To continue, configure an API key (this may incur API billing):",
     "1) Create a key: https://ai.google.dev/gemini-api/docs/api-key",
-    "2) Export it: GEMINI_API_KEY=... (or GOOGLE_API_KEY)",
-    "3) Restart gemini-mcp-bridge (keep GEMINI_MCP_AUTH_MODE=auto for OAuth-first fallback).",
+    "2) Save it to ~/.gemini-mcp-bridge/api-key (or /etc/gemini-mcp-bridge/api-key for shared use)",
+    "3) Or export it: GEMINI_API_KEY=... (or GOOGLE_API_KEY)",
+    "4) Restart gemini-mcp-bridge (keep GEMINI_MCP_AUTH_MODE=auto for OAuth-first fallback).",
   ].join("\n");
 }
 
@@ -46,10 +53,34 @@ export function formatToolError(error: unknown): ToolErrorInfo {
     return { message: "Rate limit exceeded. Wait a minute and retry." };
   }
 
+  if (error instanceof BudgetApprovalRequiredError) {
+    const increment = error.incrementTokens;
+    return {
+      message:
+        `Token budget reached (${error.usedTokens}/${error.maxTokens}). ` +
+        `Approve another ${increment} tokens for today:\n` +
+        "1) Run gemini-mcp-bridge --approve-budget\n" +
+        "2) Retry your request.",
+    };
+  }
+
   if (error instanceof BudgetError) {
     return {
       message:
-        "Daily token budget exceeded. Reduce usage or increase GEMINI_MCP_DAILY_TOKEN_LIMIT in config.",
+        "Token budget exceeded (bridge safety limit). Reduce usage or increase GEMINI_MCP_DAILY_TOKEN_LIMIT in config.",
+    };
+  }
+
+  if (error instanceof ApiKeyFallbackPromptError) {
+    const rawMessage = redactString((error.message || "").trim());
+    const detail = rawMessage ? ` (${rawMessage})` : "";
+    return {
+      message:
+        `OAuth/ADC request failed${detail}. An API key is available, but fallback requires approval.\n\n` +
+        "To approve fallback:\n" +
+        "1) Run gemini-mcp-bridge --setup and choose API key fallback = auto\n" +
+        "2) Or set GEMINI_MCP_AUTH_FALLBACK=auto\n" +
+        "3) Restart your MCP client and retry.",
     };
   }
 

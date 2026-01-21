@@ -55,11 +55,11 @@ Discoverability:
 ### Core Components
 
 - Config loader (`src/config.ts`) merges defaults, optional JSON config, and env overrides.
-- Auth resolver (`src/auth/resolveAuth.ts`) resolves OAuth tokens (ADC) or API keys.
-- Gemini client (`src/services/geminiClient.ts`) wraps REST endpoints (generateContent/streamGenerateContent/countTokens/listModels/embedContent/predict) and error handling.
+- Auth resolver (`src/auth/resolveAuth.ts`) resolves OAuth tokens (ADC) or API keys, including default key file paths.
+- Gemini client (`src/services/geminiClient.ts`) wraps REST endpoints (generateContent/streamGenerateContent/countTokens/listModels/embedContent/predict), honors fallback policy, and adds `x-goog-user-project` for Vertex quota project routing.
 - Tool handlers (`src/tools/*`) map MCP tools to Gemini API requests.
 - Resources (`src/resources/*`) expose usage + discovery + per-model capabilities and conversation state.
-- Rate limiting and budgets (`src/limits/*`) prevent runaway costs.
+- Rate limiting and budgets (`src/limits/*`) prevent runaway costs; daily budgets can be incremented with explicit approvals.
 
 ### Data Flow
 
@@ -138,9 +138,14 @@ npm run lint
 
 ## Setup Wizard
 
-- `npm run setup` runs `scripts/setup.mjs` to guide backend selection, write the
-  config file, optionally run `gcloud` steps for Vertex, and optionally configure
-  MCP client configs for one or more users.
+- `gemini-mcp-bridge --setup` (or `npm run setup`) runs `scripts/setup.mjs` to guide
+  sign-in selection, write the config file, optionally store an API key with consent,
+  optionally run `gcloud` steps for Vertex, and optionally configure MCP client
+  configs for one or more users.
+- Vertex (gcloud/ADC) is the default sign-in path; API key fallback is optional.
+- API keys are stored in `~/.gemini-mcp-bridge/api-key` by default (or `/etc/gemini-mcp-bridge/api-key` for shared use).
+- Fallback policy defaults to `prompt`; users can switch to `auto` via the wizard or env.
+- When configuring MCP clients, the wizard can optionally set a repo root for filesystem tools (auto-detects git root and asks for confirmation).
 - The wizard uses ANSI color output when attached to a TTY; set `NO_COLOR=1` to disable.
 
 ## Security Notes

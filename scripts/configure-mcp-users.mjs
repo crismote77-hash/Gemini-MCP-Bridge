@@ -1,10 +1,60 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const DEFAULT_SERVER_NAME = "gemini-bridge";
 const DEFAULT_COMMAND = "gemini-mcp-bridge";
 const DEFAULT_ARGS = ["--stdio"];
+
+function findGitRoot(startDir) {
+  let current = path.resolve(startDir);
+  while (true) {
+    if (fs.existsSync(path.join(current, ".git"))) return current;
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+function escapeTomlString(value) {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function formatTomlRoots(roots) {
+  const entries = roots.map((root) => {
+    const parts = [`uri = "${escapeTomlString(root.uri)}"`];
+    if (root.name) {
+      parts.push(`name = "${escapeTomlString(root.name)}"`);
+    }
+    return `{ ${parts.join(", ")} }`;
+  });
+  return `roots = [${entries.join(", ")}]`;
+}
+
+function resolveRootUri(opts) {
+  if (opts.rootUri) {
+    if (!opts.rootUri.startsWith("file://")) {
+      process.stderr.write(
+        `Warning: root URI does not start with file:// (${opts.rootUri})\n`,
+      );
+    }
+    return opts.rootUri;
+  }
+  if (!opts.rootPath) return null;
+  const resolved = path.resolve(opts.rootPath);
+  try {
+    const stat = fs.statSync(resolved);
+    if (!stat.isDirectory()) {
+      process.stderr.write(
+        `Warning: root path is not a directory (${resolved})\n`,
+      );
+    }
+  } catch {
+    process.stderr.write(`Warning: root path does not exist (${resolved})\n`);
+  }
+  return pathToFileURL(resolved).toString();
+}
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -15,9 +65,32 @@ function parseArgs(argv) {
     codex: true,
     claudeDesktop: true,
     claudeCode: true,
+    geminiCli: true,
     serverName: DEFAULT_SERVER_NAME,
     command: DEFAULT_COMMAND,
     args: DEFAULT_ARGS,
+    rootPath: undefined,
+    rootUri: undefined,
+  };
+
+  const setRootPath = (value) => {
+    if (!value) throw new Error("Missing value for root path");
+    if (opts.rootPath || opts.rootUri) {
+      throw new Error(
+        "Only one of --root-path, --root-uri, --root-cwd, --root-git is allowed.",
+      );
+    }
+    opts.rootPath = value;
+  };
+
+  const setRootUri = (value) => {
+    if (!value) throw new Error("Missing value for root URI");
+    if (opts.rootPath || opts.rootUri) {
+      throw new Error(
+        "Only one of --root-path, --root-uri, --root-cwd, --root-git is allowed.",
+      );
+    }
+    opts.rootUri = value;
   };
 
   while (args.length > 0) {
@@ -61,6 +134,30 @@ function parseArgs(argv) {
       opts.claudeCode = false;
       continue;
     }
+    if (a === "--no-gemini-cli") {
+      opts.geminiCli = false;
+      continue;
+    }
+    if (a === "--root-path") {
+      setRootPath(args.shift());
+      continue;
+    }
+    if (a === "--root-uri") {
+      setRootUri(args.shift());
+      continue;
+    }
+    if (a === "--root-cwd") {
+      setRootPath(process.cwd());
+      continue;
+    }
+    if (a === "--root-git") {
+      const root = findGitRoot(process.cwd());
+      if (!root) {
+        throw new Error("No git repo found for --root-git.");
+      }
+      setRootPath(root);
+      continue;
+    }
     if (a === "--help" || a === "-h") {
       printHelp();
       process.exit(0);
@@ -75,7 +172,9 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  process.stdout.write(`Configure Gemini MCP Bridge for Codex + Claude.\n\n`);
+  process.stdout.write(
+    `Configure Gemini MCP Bridge for Codex + Claude + Gemini CLI.\n\n`,
+  );
   process.stdout.write(`Usage:\n`);
   process.stdout.write(
     `  node scripts/configure-mcp-users.mjs --all-users [--dry-run]\n`,
@@ -90,10 +189,15 @@ function printHelp() {
   process.stdout.write(`  --no-codex             Skip Codex CLI config\n`);
   process.stdout.write(`  --no-claude-desktop    Skip Claude Desktop config\n`);
   process.stdout.write(`  --no-claude-code       Skip Claude Code config\n`);
+  process.stdout.write(`  --no-gemini-cli        Skip Gemini CLI config\n`);
   process.stdout.write(
     `  --server-name <name>   MCP server name (default: gemini-bridge)\n`,
   );
   process.stdout.write(`  --command <cmd>        Command (default: gemini-mcp-bridge)\n`);
+  process.stdout.write(`  --root-path <path>     Configure a single repo root\n`);
+  process.stdout.write(`  --root-uri <uri>       Configure a single repo root by URI\n`);
+  process.stdout.write(`  --root-cwd             Use current working directory as root\n`);
+  process.stdout.write(`  --root-git             Use nearest git root as root\n`);
 }
 
 function isPlainObject(value) {
@@ -198,7 +302,7 @@ function ensureTomlTable(content, tableName) {
   return content + `${suffix}\n[${tableName}]\n`;
 }
 
-function upsertCodexConfig(content, { serverName, command, args }) {
+function upsertCodexConfig(content, { serverName, command, args, roots }) {
   let out = content ?? "";
   out = out.replace(/\r\n/g, "\n");
   if (out.length > 0 && !out.endsWith("\n")) out += "\n";
@@ -212,6 +316,14 @@ function upsertCodexConfig(content, { serverName, command, args }) {
     "args",
     `args = ${JSON.stringify(args)}`,
   );
+  if (Array.isArray(roots) && roots.length > 0) {
+    out = upsertTomlKeyInTable(
+      out,
+      table,
+      "roots",
+      formatTomlRoots(roots),
+    );
+  }
 
   const envTable = `${table}.env`;
   out = ensureTomlTable(out, envTable);
@@ -225,14 +337,25 @@ function upsertCodexConfig(content, { serverName, command, args }) {
   return out;
 }
 
-function upsertClaudeDesktopConfig(obj, { serverName, command, args }) {
+function upsertClaudeDesktopConfig(obj, { serverName, command, args, roots }) {
   const out = isPlainObject(obj) ? obj : {};
   if (!isPlainObject(out.mcpServers)) out.mcpServers = {};
-  out.mcpServers[serverName] = { command, args };
+  const existing = isPlainObject(out.mcpServers[serverName])
+    ? out.mcpServers[serverName]
+    : {};
+  const next = { ...existing, command, args };
+  if (Array.isArray(roots) && roots.length > 0) {
+    next.roots = roots;
+  }
+  out.mcpServers[serverName] = next;
   return out;
 }
 
-function upsertClaudeCodeConfig(obj, { serverName, command, args }, homeDir) {
+function upsertClaudeCodeConfig(
+  obj,
+  { serverName, command, args, roots },
+  homeDir,
+) {
   const out = isPlainObject(obj) ? obj : {};
   if (!isPlainObject(out.projects)) out.projects = {};
   const projects = out.projects;
@@ -263,14 +386,38 @@ function upsertClaudeCodeConfig(obj, { serverName, command, args }, homeDir) {
 
   for (const projectPath of Object.keys(projects)) {
     ensureProject(projectPath);
-    projects[projectPath].mcpServers[serverName] = {
+    const existing = isPlainObject(projects[projectPath].mcpServers[serverName])
+      ? projects[projectPath].mcpServers[serverName]
+      : {};
+    const env = isPlainObject(existing.env) ? { ...existing.env } : {};
+    env.GEMINI_MCP_AUTH_MODE = "auto";
+    const next = {
+      ...existing,
       type: "stdio",
       command,
       args,
-      env: { GEMINI_MCP_AUTH_MODE: "auto" },
+      env,
     };
+    if (Array.isArray(roots) && roots.length > 0) {
+      next.roots = roots;
+    }
+    projects[projectPath].mcpServers[serverName] = next;
   }
 
+  return out;
+}
+
+function upsertGeminiCliConfig(obj, { serverName, command, args, roots }) {
+  const out = isPlainObject(obj) ? obj : {};
+  if (!isPlainObject(out.mcpServers)) out.mcpServers = {};
+  const existing = isPlainObject(out.mcpServers[serverName])
+    ? out.mcpServers[serverName]
+    : {};
+  const next = { ...existing, command, args };
+  if (Array.isArray(roots) && roots.length > 0) {
+    next.roots = roots;
+  }
+  out.mcpServers[serverName] = next;
   return out;
 }
 
@@ -301,6 +448,12 @@ function defaultUserFilter(user) {
 
 function configureUser(user, opts) {
   const changes = [];
+  const rootUri = resolveRootUri(opts);
+  const rootEntries = rootUri ? [{ uri: rootUri }] : undefined;
+  const configOpts =
+    rootEntries && rootEntries.length > 0
+      ? { ...opts, roots: rootEntries }
+      : opts;
 
   if (opts.codex) {
     const codexDir = path.join(user.home, ".codex");
@@ -312,7 +465,7 @@ function configureUser(user, opts) {
     });
     const codexConfigPath = path.join(codexDir, "config.toml");
     const before = readTextIfExists(codexConfigPath) ?? "";
-    const after = upsertCodexConfig(before, opts);
+    const after = upsertCodexConfig(before, configOpts);
     if (after !== before) {
       changes.push(`Codex: ${codexConfigPath}`);
       writeTextFile(codexConfigPath, after, {
@@ -346,7 +499,7 @@ function configureUser(user, opts) {
         beforeObj = {};
       }
     }
-    const afterObj = upsertClaudeDesktopConfig(beforeObj, opts);
+    const afterObj = upsertClaudeDesktopConfig(beforeObj, configOpts);
     const afterText = JSON.stringify(afterObj, null, 2) + "\n";
     if ((beforeText ?? "") !== afterText) {
       changes.push(`Claude Desktop: ${claudeConfigPath}`);
@@ -373,11 +526,45 @@ function configureUser(user, opts) {
         beforeObj = {};
       }
     }
-    const afterObj = upsertClaudeCodeConfig(beforeObj, opts, user.home);
+    const afterObj = upsertClaudeCodeConfig(beforeObj, configOpts, user.home);
     const afterText = JSON.stringify(afterObj, null, 2) + "\n";
     if ((beforeText ?? "") !== afterText) {
       changes.push(`Claude Code: ${claudeCodePath}`);
       writeTextFile(claudeCodePath, afterText, {
+        mode: 0o600,
+        uid: user.uid,
+        gid: user.gid,
+        dryRun: opts.dryRun,
+      });
+    }
+  }
+
+  if (opts.geminiCli) {
+    const geminiDir = path.join(user.home, ".gemini");
+    ensureDir(geminiDir, {
+      mode: 0o700,
+      uid: user.uid,
+      gid: user.gid,
+      dryRun: opts.dryRun,
+    });
+    const geminiConfigPath = path.join(geminiDir, "settings.json");
+    const beforeText = readTextIfExists(geminiConfigPath);
+    let beforeObj = {};
+    if (beforeText) {
+      try {
+        beforeObj = JSON.parse(beforeText);
+      } catch {
+        const backupPath = `${geminiConfigPath}.bak-${Date.now()}`;
+        changes.push(`Gemini CLI: invalid JSON backed up to ${backupPath}`);
+        if (!opts.dryRun) fs.copyFileSync(geminiConfigPath, backupPath);
+        beforeObj = {};
+      }
+    }
+    const afterObj = upsertGeminiCliConfig(beforeObj, configOpts);
+    const afterText = JSON.stringify(afterObj, null, 2) + "\n";
+    if ((beforeText ?? "") !== afterText) {
+      changes.push(`Gemini CLI: ${geminiConfigPath}`);
+      writeTextFile(geminiConfigPath, afterText, {
         mode: 0o600,
         uid: user.uid,
         gid: user.gid,

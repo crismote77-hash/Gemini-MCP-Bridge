@@ -98,7 +98,7 @@ export async function listClientRoots(extra: RootsExtra): Promise<string[]> {
 export function assertFilesystemModeAllowsReads(config: BridgeConfig): void {
   if (config.filesystem.mode === "off") {
     throw new Error(
-      "Filesystem access is disabled. Set filesystem.mode=repo (MCP roots) or filesystem.mode=system in config, or set GEMINI_MCP_FS_MODE.",
+      "Filesystem access is disabled. Set filesystem.mode=repo (requires MCP roots from your client) or filesystem.mode=system in config, or set GEMINI_MCP_FS_MODE.",
     );
   }
   if (config.filesystem.mode === "system" && !config.filesystem.allowSystem) {
@@ -150,12 +150,12 @@ function normalizeConfigExtensions(exts: string[]): Set<string> {
 function pickRootForRelativeTargets(roots: string[]): string {
   if (roots.length === 0) {
     throw new Error(
-      "No MCP roots available. Configure your MCP client to provide roots.",
+      "No MCP roots available. Configure your MCP client to send a single repo/workspace root (or enable its auto-roots setting). Keep roots narrow to avoid over-sharing.",
     );
   }
   if (roots.length > 1) {
     throw new Error(
-      "Multiple MCP roots are configured. Pass absolute paths, or configure a single repo root.",
+      "Multiple MCP roots are configured. Configure a single repo root (this server currently supports one root per request).",
     );
   }
   return roots[0];

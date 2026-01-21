@@ -1,14 +1,17 @@
 # Project Status
 
-Last updated (UTC): 2026-01-21T10:54:43Z
+Last updated (UTC): 2026-01-21T15:30:50Z
 
 ## In Progress
 
-- None
+- (none)
 
 ## Pending
 
-- None
+- [blocked] Project-wide code review via gemini_code_review. DoD: Findings list with file/line references. Reason: missing MCP roots for repo-scoped code review tool.
+- [pending] Verify review findings in source for severity/accuracy. DoD: Confirmed with file/line refs or dismissed.
+- [pending] Configure MCP roots for all projects (needs project scope/approach confirmation)
+- [pending] Enable workspace auto-roots for Claude Desktop (UI setting) and update Claude Code mcpContextUris for other users. DoD: Desktop auto-roots on; .claude.json updated for remaining users.
 
 ## Done
 
@@ -42,11 +45,20 @@ Last updated (UTC): 2026-01-21T10:54:43Z
 - Audit docs/codebase for inconsistencies/missing info; align help/resources/docs with filesystem tools + capabilities notes.
 - Sync AGENTS/CLAUDE + USER_MANUAL/TECHNICAL for install options and capability/limit discoverability.
 - Verify main after doc sync (npm run build/test/lint).
+- Document MCP roots auto-configuration guidance and user-facing warnings for filesystem tools.
+- Add instructions for changing MCP roots in user-facing docs/help.
+- Add client-specific MCP roots examples and auto-root configuration via setup/configure scripts.
+- Guided setup + CLI entrypoint for beginner-friendly install (Vertex default + API key fallback + repo root wizard).
+- Install gemini-mcp-bridge globally (system-wide) and configure Claude Desktop + Claude Code for all users with workspace auto-roots (no explicit roots).
+- Enable Claude Code workspace roots for current user and run doctor check (quota project missing).
+- Add global API key file discovery, prompt fallback policy, system key storage option, and Vertex quota project header; update setup/docs/tests.
+- [completed] Add daily budget approval prompts + approvals file + CLI hook. DoD: npm test -- src/limits/dailyTokenBudget.test.ts src/limits/budgetApprovals.test.ts; Planner/Critic/Verifier: prompt policy + approvals file + CLI, ensure no secrets, tests passed.
 
 ## Verification Snapshot
 
-Last verified (UTC): 2026-01-21T10:54:43Z
+Last verified (UTC): 2026-01-21T15:30:50Z
 
 - npm run build
-- npm test
 - npm run lint
+- npm test -- src/limits/dailyTokenBudget.test.ts src/limits/budgetApprovals.test.ts
+- npm test

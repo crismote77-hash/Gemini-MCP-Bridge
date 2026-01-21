@@ -113,4 +113,30 @@ describe("resolveGeminiAuth", () => {
       source: "adc_user",
     });
   });
+
+  it("uses apiKeyFilePaths when no env vars are set", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error("fetch should not be called");
+    }) as unknown as typeof fetch;
+
+    const dir = makeTempDir();
+    const keyPath = path.join(dir, "api-key");
+    fs.writeFileSync(keyPath, "file-key", "utf8");
+
+    const auth = await resolveGeminiAuth({
+      mode: "apiKey",
+      apiKeyEnvVar: "GEMINI_API_KEY",
+      apiKeyEnvVarAlt: "GOOGLE_API_KEY",
+      apiKeyFileEnvVar: "GEMINI_API_KEY_FILE",
+      apiKeyFilePaths: [keyPath],
+      oauthScopes: ["https://www.googleapis.com/auth/generative-language"],
+      env: {},
+    });
+
+    expect(auth).toEqual({
+      type: "apiKey",
+      apiKey: "file-key",
+      source: "file",
+    });
+  });
 });

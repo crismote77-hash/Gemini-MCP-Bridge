@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GeminiClient } from "./geminiClient.js";
+import { ApiKeyFallbackPromptError, GeminiClient } from "./geminiClient.js";
 import type { Logger } from "../logger.js";
 
 describe("GeminiClient", () => {
@@ -119,6 +119,82 @@ describe("GeminiClient", () => {
     expect(calls).toEqual([
       "https://example.com/models/gemini-3-pro-preview:generateContent",
     ]);
+  });
+
+  it("prompts instead of auto-fallback when policy is prompt", async () => {
+    const logger: Logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+    globalThis.fetch = vi.fn(
+      async (input: string | URL, init?: RequestInit) => {
+        const url = String(input);
+        const headers = (init?.headers ?? {}) as Record<string, string>;
+        calls.push({ url, headers });
+        return new Response(
+          JSON.stringify({ error: { message: "Quota exceeded." } }),
+          { status: 429, headers: { "Content-Type": "application/json" } },
+        );
+      },
+    ) as unknown as typeof fetch;
+
+    const client = new GeminiClient(
+      {
+        accessToken: "oauth-token",
+        apiKey: "api-key",
+        allowApiKeyFallback: true,
+        apiKeyFallbackPolicy: "prompt",
+        baseUrl: "https://example.com",
+        apiKeyFallbackBaseUrl: "https://fallback.example.com",
+        timeoutMs: 1000,
+      },
+      logger,
+    );
+
+    await expect(client.listModels({ pageSize: 1 })).rejects.toBeInstanceOf(
+      ApiKeyFallbackPromptError,
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.headers.Authorization).toBe("Bearer oauth-token");
+  });
+
+  it("adds x-goog-user-project when using Vertex base URLs", async () => {
+    const logger: Logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+
+    globalThis.fetch = vi.fn(
+      async (input: string | URL, init?: RequestInit) => {
+        const headers = (init?.headers ?? {}) as Record<string, string>;
+        expect(headers["x-goog-user-project"]).toBe("cryptoking");
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    ) as unknown as typeof fetch;
+
+    const client = new GeminiClient(
+      {
+        backend: "vertex",
+        accessToken: "oauth-token",
+        baseUrl:
+          "https://us-central1-aiplatform.googleapis.com/v1/projects/p/locations/us-central1/publishers/google",
+        timeoutMs: 1000,
+        quotaProject: "cryptoking",
+      },
+      logger,
+    );
+
+    const result = await client.listModels<{ ok: boolean }>({ pageSize: 1 });
+    expect(result.ok).toBe(true);
   });
 
   it("supports Vertex-style predict calls", async () => {

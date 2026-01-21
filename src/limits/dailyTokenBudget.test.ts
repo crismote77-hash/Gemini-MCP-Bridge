@@ -1,5 +1,12 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { DailyTokenBudget, BudgetError } from "./dailyTokenBudget.js";
+import {
+  DailyTokenBudget,
+  BudgetApprovalRequiredError,
+  BudgetError,
+} from "./dailyTokenBudget.js";
 
 describe("DailyTokenBudget", () => {
   let mockNowMs: () => number;
@@ -15,6 +22,7 @@ describe("DailyTokenBudget", () => {
     it("allows usage under the limit", async () => {
       const budget = new DailyTokenBudget({
         maxTokensPerDay: 1000,
+        approvalPolicy: "never",
         nowMs: mockNowMs,
       });
 
@@ -27,6 +35,7 @@ describe("DailyTokenBudget", () => {
     it("throws BudgetError when limit exceeded", async () => {
       const budget = new DailyTokenBudget({
         maxTokensPerDay: 100,
+        approvalPolicy: "never",
         nowMs: mockNowMs,
       });
 
@@ -40,6 +49,7 @@ describe("DailyTokenBudget", () => {
     it("tracks usage by tool", async () => {
       const budget = new DailyTokenBudget({
         maxTokensPerDay: 1000,
+        approvalPolicy: "never",
         nowMs: mockNowMs,
       });
 
@@ -57,6 +67,7 @@ describe("DailyTokenBudget", () => {
     it("resets usage on new UTC day", async () => {
       const budget = new DailyTokenBudget({
         maxTokensPerDay: 1000,
+        approvalPolicy: "never",
         nowMs: mockNowMs,
       });
 
@@ -76,6 +87,7 @@ describe("DailyTokenBudget", () => {
     it("reserves tokens for pending operations", async () => {
       const budget = new DailyTokenBudget({
         maxTokensPerDay: 100,
+        approvalPolicy: "never",
         nowMs: mockNowMs,
       });
 
@@ -89,6 +101,7 @@ describe("DailyTokenBudget", () => {
     it("releases reservation on error", async () => {
       const budget = new DailyTokenBudget({
         maxTokensPerDay: 100,
+        approvalPolicy: "never",
         nowMs: mockNowMs,
       });
 
@@ -102,6 +115,7 @@ describe("DailyTokenBudget", () => {
     it("commits usage accounting for reservation", async () => {
       const budget = new DailyTokenBudget({
         maxTokensPerDay: 100,
+        approvalPolicy: "never",
         nowMs: mockNowMs,
       });
 
@@ -117,6 +131,7 @@ describe("DailyTokenBudget", () => {
     it("handles zero-token reservations", async () => {
       const budget = new DailyTokenBudget({
         maxTokensPerDay: 100,
+        approvalPolicy: "never",
         nowMs: mockNowMs,
       });
 
@@ -133,6 +148,7 @@ describe("DailyTokenBudget", () => {
     it("tracks cost when provided", async () => {
       const budget = new DailyTokenBudget({
         maxTokensPerDay: 1000,
+        approvalPolicy: "never",
         nowMs: mockNowMs,
       });
 
@@ -147,6 +163,7 @@ describe("DailyTokenBudget", () => {
     it("omits cost when not provided", async () => {
       const budget = new DailyTokenBudget({
         maxTokensPerDay: 1000,
+        approvalPolicy: "never",
         nowMs: mockNowMs,
       });
 
@@ -154,6 +171,42 @@ describe("DailyTokenBudget", () => {
 
       const usage = await budget.getUsage();
       expect(usage.estimatedCostUsd).toBeUndefined();
+    });
+  });
+
+  describe("approval policies", () => {
+    it("prompts for approval when policy is prompt", async () => {
+      const budget = new DailyTokenBudget({
+        maxTokensPerDay: 100,
+        approvalPolicy: "prompt",
+        incrementTokens: 200,
+        nowMs: mockNowMs,
+      });
+
+      await budget.commit("test_tool", 100);
+      await expect(budget.checkOrThrow()).rejects.toThrow(
+        BudgetApprovalRequiredError,
+      );
+    });
+
+    it("auto-approves when policy is auto", async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gemini-mcp-budget-"));
+      const approvalPath = path.join(dir, "budget-approvals.json");
+      const budget = new DailyTokenBudget({
+        maxTokensPerDay: 100,
+        approvalPolicy: "auto",
+        approvalPath,
+        incrementTokens: 100,
+        nowMs: mockNowMs,
+      });
+
+      await budget.commit("test_tool", 100);
+      await expect(budget.checkOrThrow()).resolves.toBeUndefined();
+
+      const usage = await budget.getUsage();
+      expect(usage.baseMaxTokens).toBe(100);
+      expect(usage.approvedTokens).toBe(100);
+      expect(usage.maxTokens).toBe(200);
     });
   });
 });

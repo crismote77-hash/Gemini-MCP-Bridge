@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -13,8 +14,10 @@ import { ConversationStore } from "./services/conversationStore.js";
 import { createMcpServer } from "./server.js";
 import { startHttpServer } from "./httpServer.js";
 import { createSharedLimitStore } from "./limits/sharedStore.js";
+import { approveBudgetIncrement } from "./limits/budgetApprovals.js";
 import { redactMeta, redactString } from "./utils/redact.js";
 import { resolvePrimaryApiBaseUrl } from "./utils/apiBaseUrls.js";
+import { expandHome } from "./utils/paths.js";
 
 type CliCommand =
   | {
@@ -24,8 +27,10 @@ type CliCommand =
       httpHost?: string;
       httpPort?: number;
     }
+  | { kind: "setup"; setupArgs: string[] }
   | { kind: "print-config"; configPath?: string }
   | { kind: "doctor"; configPath?: string; checkApi: boolean }
+  | { kind: "approve-budget"; configPath?: string; increment?: number }
   | { kind: "help" }
   | { kind: "version" };
 
@@ -48,6 +53,39 @@ function readPackageInfo(): { name: string; version: string } {
 }
 
 function parseArgs(argv: string[]): CliCommand {
+  if (argv.includes("--setup")) {
+    const setupArgs = argv.filter((arg) => arg !== "--setup");
+    return { kind: "setup", setupArgs };
+  }
+
+  if (argv.includes("--approve-budget")) {
+    const args = [...argv];
+    let configPath: string | undefined;
+    let increment: number | undefined;
+    while (args.length > 0) {
+      const a = args.shift();
+      if (!a) break;
+      if (a === "--approve-budget") continue;
+      if (a === "--config") {
+        const value = args.shift();
+        if (!value) return { kind: "help" };
+        configPath = value;
+        continue;
+      }
+      if (a === "--increment") {
+        const value = args.shift();
+        if (!value) return { kind: "help" };
+        const parsed = Number.parseInt(value, 10);
+        if (!Number.isFinite(parsed) || parsed <= 0) return { kind: "help" };
+        increment = parsed;
+        continue;
+      }
+      if (a === "--help" || a === "-h") return { kind: "help" };
+      return { kind: "help" };
+    }
+    return { kind: "approve-budget", configPath, increment };
+  }
+
   const args = [...argv];
   let configPath: string | undefined;
   let checkApi = false;
@@ -127,9 +165,13 @@ function parseArgs(argv: string[]): CliCommand {
 function printHelp(info: { name: string; version: string }): void {
   process.stdout.write(`${info.name} ${info.version}\n\n`);
   process.stdout.write(`Usage:\n`);
+  process.stdout.write(`  gemini-mcp-bridge --setup [wizard options]\n`);
   process.stdout.write(`  gemini-mcp-bridge --stdio [--config path]\n`);
   process.stdout.write(
     `  gemini-mcp-bridge --http [--http-host host] [--http-port port] [--config path]\n`,
+  );
+  process.stdout.write(
+    `  gemini-mcp-bridge --approve-budget [--increment tokens] [--config path]\n`,
   );
   process.stdout.write(`  gemini-mcp-bridge --print-config [--config path]\n`);
   process.stdout.write(
@@ -138,6 +180,40 @@ function printHelp(info: { name: string; version: string }): void {
   process.stdout.write(`  gemini-mcp-bridge --version\n`);
   process.stdout.write(`  gemini-mcp-bridge --help\n`);
   process.stdout.write(`\n`);
+}
+
+async function runApproveBudget(
+  configPath?: string,
+  incrementOverride?: number,
+): Promise<number> {
+  const config = loadConfig({ configPath });
+  const incrementTokens =
+    incrementOverride ?? config.limits.budgetIncrementTokens;
+  if (!Number.isFinite(incrementTokens) || incrementTokens <= 0) {
+    process.stderr.write("Invalid budget increment.\n");
+    return 1;
+  }
+
+  const dayUtc = new Date().toISOString().slice(0, 10);
+  const approvalPath = config.limits.budgetApprovalPath;
+  const entry = approveBudgetIncrement(approvalPath, dayUtc, incrementTokens);
+  const maxTokens = config.limits.maxTokensPerDay + entry.tokens;
+
+  process.stdout.write(
+    JSON.stringify(
+      {
+        ok: true,
+        dayUtc,
+        incrementTokens,
+        approvedTokens: entry.tokens,
+        maxTokens,
+        approvalPath: expandHome(approvalPath),
+      },
+      null,
+      2,
+    ) + "\n",
+  );
+  return 0;
 }
 
 async function runDoctor(
@@ -185,6 +261,11 @@ async function runDoctor(
       message: config.vertex.project ? "set" : "missing",
     });
     checks.push({
+      name: "vertex_quota_project",
+      ok: Boolean(config.vertex.quotaProject),
+      message: config.vertex.quotaProject ? "set" : "missing",
+    });
+    checks.push({
       name: "vertex_location",
       ok: Boolean(config.vertex.location),
       message: config.vertex.location ? "set" : "missing",
@@ -212,6 +293,11 @@ async function runDoctor(
     message: config.auth.mode,
   });
   checks.push({
+    name: "auth_fallback_policy",
+    ok: true,
+    message: config.auth.fallbackPolicy,
+  });
+  checks.push({
     name: "oauth_scopes",
     ok: true,
     message:
@@ -223,6 +309,10 @@ async function runDoctor(
   const apiKeyEnv = process.env[config.auth.apiKeyEnvVar];
   const apiKeyAlt = process.env[config.auth.apiKeyEnvVarAlt];
   const apiKeyFileEnv = process.env[config.auth.apiKeyFileEnvVar];
+  const apiKeyFilePaths = config.auth.apiKeyFilePaths ?? [];
+  const existingApiKeyFiles = apiKeyFilePaths
+    .map((entry) => expandHome(entry))
+    .filter((entry) => entry && fs.existsSync(entry));
   const oauthTokenEnv = process.env.GEMINI_MCP_OAUTH_TOKEN;
   const oauthTokenAltEnv = process.env.GOOGLE_OAUTH_ACCESS_TOKEN;
   const googleCredsEnv = process.env.GOOGLE_APPLICATION_CREDENTIALS;
@@ -247,6 +337,14 @@ async function runDoctor(
     message: apiKeyFileEnv
       ? `set (${config.auth.apiKeyFileEnvVar})`
       : `missing (${config.auth.apiKeyFileEnvVar})`,
+  });
+  checks.push({
+    name: "api_key_file_paths",
+    ok: true,
+    message:
+      existingApiKeyFiles.length > 0
+        ? `found (${existingApiKeyFiles.length})`
+        : "not found (default paths)",
   });
   checks.push({
     name: "oauth_token_env",
@@ -277,6 +375,7 @@ async function runDoctor(
       apiKeyEnvVar: config.auth.apiKeyEnvVar,
       apiKeyEnvVarAlt: config.auth.apiKeyEnvVarAlt,
       apiKeyFileEnvVar: config.auth.apiKeyFileEnvVar,
+      apiKeyFilePaths: config.auth.apiKeyFilePaths,
       oauthScopes: config.auth.oauthScopes,
     });
     checks.push({
@@ -297,8 +396,10 @@ async function runDoctor(
           resolved.type === "oauth"
             ? {
                 accessToken: resolved.accessToken,
+                backend: config.backend,
                 baseUrl: primaryApiBaseUrl ?? config.apiBaseUrl,
                 timeoutMs: 15000,
+                quotaProject: config.vertex.quotaProject,
               }
             : {
                 apiKey: resolved.apiKey,
@@ -330,6 +431,23 @@ async function runDoctor(
   return ok ? 0 : 1;
 }
 
+async function runSetup(setupArgs: string[]): Promise<number> {
+  const distDir = path.dirname(fileURLToPath(import.meta.url));
+  const rootDir = path.resolve(distDir, "..");
+  const scriptPath = path.join(rootDir, "scripts", "setup.mjs");
+  if (!fs.existsSync(scriptPath)) {
+    process.stderr.write(`Setup script not found: ${scriptPath}\n`);
+    return 1;
+  }
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [scriptPath, ...setupArgs], {
+      stdio: "inherit",
+    });
+    child.on("error", () => resolve(1));
+    child.on("close", (code) => resolve(code ?? 1));
+  });
+}
+
 async function main(): Promise<void> {
   const cmd = parseArgs(process.argv.slice(2));
   const pkg = readPackageInfo();
@@ -342,8 +460,16 @@ async function main(): Promise<void> {
     process.stdout.write(`${pkg.name} ${pkg.version}\n`);
     process.exit(0);
   }
+  if (cmd.kind === "setup") {
+    const code = await runSetup(cmd.setupArgs);
+    process.exit(code);
+  }
   if (cmd.kind === "doctor") {
     const code = await runDoctor(cmd.configPath, cmd.checkApi);
+    process.exit(code);
+  }
+  if (cmd.kind === "approve-budget") {
+    const code = await runApproveBudget(cmd.configPath, cmd.increment);
     process.exit(code);
   }
   if (cmd.kind === "print-config") {
@@ -373,6 +499,9 @@ async function main(): Promise<void> {
   const dailyBudget = new DailyTokenBudget({
     maxTokensPerDay: config.limits.maxTokensPerDay,
     sharedStore: sharedLimitStore ?? undefined,
+    approvalPolicy: config.limits.budgetApprovalPolicy,
+    approvalPath: config.limits.budgetApprovalPath,
+    incrementTokens: config.limits.budgetIncrementTokens,
   });
   const sharedDeps = { config, logger, rateLimiter, dailyBudget };
 

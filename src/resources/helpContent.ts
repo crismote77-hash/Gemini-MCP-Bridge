@@ -1,6 +1,7 @@
 export const HELP_USAGE = `# Gemini MCP Bridge Help
 
 ## Quick Start
+- Run gemini-mcp-bridge --setup for guided setup (Vertex default + optional API key fallback).
 - Use gemini_generate_text for core text generation.
 - Use gemini_generate_text_stream for incremental progress updates (clients must request progress notifications).
 - Use gemini_generate_json for strict JSON output via structuredContent.
@@ -16,13 +17,27 @@ export const HELP_USAGE = `# Gemini MCP Bridge Help
 - Use gemini_conversation_* tools to create/list/export/reset in-memory threads.
 - Use gemini_get_help for built-in help.
 
+## Filesystem Roots (repo tools)
+- Repo tools (gemini_code_review / gemini_code_fix) require filesystem.mode=repo plus MCP roots from your client.
+- Configure your MCP client to send a single repo/workspace root; many clients support auto-roots to the current workspace.
+- Warning: auto-roots can over-share in multi-repo or home-directory contexts; keep roots narrow and only enable for trusted servers.
+- If you see "No MCP roots available" or "Multiple MCP roots", adjust client roots or use separate server entries per project.
+- To change roots, update your MCP client config (often a roots/workspace setting) and restart the client.
+- Run gemini-mcp-bridge --setup or node scripts/configure-mcp-users.mjs --root-git/--root-cwd to set roots automatically.
+
 ## Provider-Agnostic Aliases
 - llm_* tools are aliases to the Gemini tools above (useful for clients that want stable names across providers).
 
 ## Authentication & Backend
-- Default backend is the Gemini Developer API. Use an API key: GEMINI_API_KEY=... (or GOOGLE_API_KEY).
+- Default backend is the Gemini Developer API. Use an API key via GEMINI_API_KEY (or GOOGLE_API_KEY), or save it to ~/.gemini-mcp-bridge/api-key (or /etc/gemini-mcp-bridge/api-key for shared use).
 - To use gcloud/ADC (subscription) credentials, set GEMINI_MCP_BACKEND=vertex and configure GEMINI_MCP_VERTEX_PROJECT + GEMINI_MCP_VERTEX_LOCATION.
 - In GEMINI_MCP_AUTH_MODE=auto, the bridge can retry with an API key if OAuth/ADC fails (and will warn on modality change).
+- Control fallback behavior with GEMINI_MCP_AUTH_FALLBACK=auto|prompt|never (default: prompt).
+
+## Usage Limits
+- The daily token budget is a bridge safety limit (separate from model context windows).
+- When the budget is reached and approval is set to prompt, run: gemini-mcp-bridge --approve-budget (adds another 200,000 tokens for today by default).
+- Control approval behavior with GEMINI_MCP_BUDGET_APPROVAL_POLICY=auto|prompt|never.
 
 ## Discoverability
 - Read gemini://capabilities for server features.
@@ -115,7 +130,7 @@ export const HELP_PARAMETERS = `# Parameters Reference
 - temperature (number, optional)
 - maxTokens (number, optional; must be <= limits.maxTokensPerRequest, see gemini://capabilities)
 
-Requires filesystem access to be enabled (filesystem.mode=repo recommended). Repo mode uses MCP roots (roots/list) as the allowlist.
+Requires filesystem access to be enabled (filesystem.mode=repo recommended). Repo mode uses MCP roots (roots/list) as the allowlist; configure your client to send a single repo/workspace root (auto-roots can help).
 
 ## gemini_code_fix
 - request (string, required)
@@ -124,6 +139,8 @@ Requires filesystem access to be enabled (filesystem.mode=repo recommended). Rep
 - model (string, optional)
 - temperature (number, optional)
 - maxTokens (number, optional; must be <= limits.maxTokensPerRequest, see gemini://capabilities)
+
+Requires filesystem access to be enabled (filesystem.mode=repo recommended). Repo mode uses MCP roots (roots/list) as the allowlist; configure your client to send a single repo/workspace root (auto-roots can help).
 
 Returns JSON via structuredContent: { summary, diff, appliedFiles? }.
 `;
@@ -136,7 +153,7 @@ export const HELP_EXAMPLES = `# Examples
 - Use gemini_analyze_image with prompt "Describe this photo" and imageUrl "...".
 - Use gemini_list_models with limit 10.
 - Use gemini_count_tokens with text "Hello world".
-- Use gemini_code_review with request "Review for security issues" and paths ["src"] (requires filesystem.mode=repo + MCP roots).
+- Use gemini_code_review with request "Review for security issues" and paths ["src"] (requires filesystem.mode=repo + MCP roots; auto-roots to workspace if enabled).
 - Use gemini_code_fix with request "Fix lint errors" and paths ["src"] (returns diff for approval).
 - Read resource gemini://capabilities.
 - Read resource gemini://model-capabilities.
