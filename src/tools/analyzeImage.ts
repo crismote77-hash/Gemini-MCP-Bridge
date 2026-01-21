@@ -22,14 +22,51 @@ import {
   takeAuthFallbackWarnings,
 } from "../utils/toolHelpers.js";
 
-const imageSchema = z.object({
-  prompt: z.string().min(1),
-  imageUrl: z.string().url().optional(),
-  imageBase64: z.string().min(1).optional(),
-  mimeType: z.string().optional(),
-  model: z.string().optional(),
-  maxTokens: z.number().int().positive().optional(),
-});
+function createImageSchema(config: BridgeConfig) {
+  const maxTokensLimit = config.limits.maxTokensPerRequest;
+  const maxInputChars = config.limits.maxInputChars;
+  const defaultMaxOutputTokens = config.generation.maxOutputTokens;
+  const maxImageBytes = config.images.maxBytes;
+
+  return z.object({
+    prompt: z
+      .string()
+      .min(1)
+      .describe(`User prompt (<= ${maxInputChars} characters).`),
+    imageUrl: z
+      .string()
+      .url()
+      .optional()
+      .describe(
+        "Publicly accessible image URL (use only one of imageUrl/imageBase64).",
+      ),
+    imageBase64: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        `Base64-encoded image bytes (max ${maxImageBytes} bytes; use only one of imageUrl/imageBase64).`,
+      ),
+    mimeType: z
+      .string()
+      .optional()
+      .describe(
+        "Image MIME type (required when using imageBase64; inferred when using imageUrl if available).",
+      ),
+    model: z.string().optional(),
+    maxTokens: z
+      .number()
+      .int()
+      .positive()
+      .max(maxTokensLimit)
+      .optional()
+      .describe(
+        `Max output tokens (<= ${maxTokensLimit}). Defaults to ${defaultMaxOutputTokens} if omitted.`,
+      ),
+  });
+}
+
+type ImageToolInput = z.infer<ReturnType<typeof createImageSchema>>;
 
 type Dependencies = {
   config: BridgeConfig;
@@ -95,22 +132,31 @@ export function registerAnalyzeImageTool(
   server: McpServer,
   deps: Dependencies,
 ): void {
+  const maxTokensLimit = deps.config.limits.maxTokensPerRequest;
+  const maxImageBytes = deps.config.images.maxBytes;
   server.registerTool(
     "gemini_analyze_image",
     {
       title: "Gemini Analyze Image",
-      description: "Analyze images with Gemini vision models.",
-      inputSchema: imageSchema,
+      description: `Analyze images with Gemini vision models. Limits: maxTokens <= ${maxTokensLimit}, maxImageBytes <= ${maxImageBytes}.`,
+      inputSchema: createImageSchema(deps.config),
     },
     createAnalyzeImageHandler(deps),
   );
 }
 
 export function createAnalyzeImageHandler(deps: Dependencies) {
+  return createAnalyzeImageHandlerForTool(deps, "gemini_analyze_image");
+}
+
+export function createAnalyzeImageHandlerForTool(
+  deps: Dependencies,
+  toolName: string,
+) {
   const toolDeps: ToolDependencies = deps;
 
-  return async (input: z.infer<typeof imageSchema>) => {
-    return withToolErrorHandling("gemini_analyze_image", toolDeps, async () => {
+  return async (input: ImageToolInput) => {
+    return withToolErrorHandling(toolName, toolDeps, async () => {
       const { prompt, imageUrl, imageBase64, mimeType, model, maxTokens } =
         input;
       if (!imageUrl && !imageBase64) {
@@ -215,7 +261,7 @@ export function createAnalyzeImageHandler(deps: Dependencies) {
           const requestTokens = usage.totalTokens || estimatedInputTokens;
 
           await deps.dailyBudget.commit(
-            "gemini_analyze_image",
+            toolName,
             requestTokens,
             undefined,
             reservation,

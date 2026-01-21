@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated (UTC): 2026-01-19T21:19:16Z
+Last updated (UTC): 2026-01-21T10:22:35Z
 
 ## In Progress
 
@@ -31,10 +31,22 @@ Last updated (UTC): 2026-01-19T21:19:16Z
 - Improve `gemini_analyze_image` error messages (surface safe underlying errors like image fetch failures).
 - Retry `gemini_list_models` against alternate Vertex endpoints on 404 before falling back to curated metadata.
 - Add daily GitHub Actions “radar” to detect Gemini API model/capability changes and auto-open a GitHub issue.
+- Add streaming + structured JSON tools (plus provider-agnostic `llm_*` aliases)
+- Add batch token/embedding tools
+- Add conversation management tools and resources
+- Add model capabilities resources and moderation tool
+- Fix JSON mode/schema handling for `jsonSchema`/`strictJson` requests (including schema wrapper unwrapping and clearer schema-related errors).
+- Raise default `maxTokensPerRequest` cap to 8192 (override via `GEMINI_MCP_MAX_TOKENS` / config).
+- Advertise tool limits/usage via MCP tool schemas (maxTokens caps + prompt hints).
+- Add opt-in filesystem access (repo-scoped via MCP roots; optional system mode) and compound tools for code review + diff fixes (with optional auto-apply).
+- Audit docs/codebase for inconsistencies/missing info; align help/resources/docs with filesystem tools + capabilities notes.
+- Sync AGENTS/CLAUDE + USER_MANUAL/TECHNICAL for install options and capability/limit discoverability.
 
 ## Verification Snapshot
 
-Last verified (UTC): 2026-01-19T21:19:16Z
+Last verified (UTC): 2026-01-21T09:32:51Z
 
 - npm run build
 - npm test
+- npm run lint
+- No additional verification for doc-only updates (2026-01-21T10:22:35Z).

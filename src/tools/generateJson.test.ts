@@ -4,14 +4,15 @@ import type { BridgeConfig } from "../config.js";
 import type { Logger } from "../logger.js";
 import type { GeminiClient } from "../services/geminiClient.js";
 import * as toolHelpers from "../utils/toolHelpers.js";
-import { createGenerateTextHandler } from "./generateText.js";
+import { ConversationStore } from "../services/conversationStore.js";
+import { createGenerateJsonHandler } from "./generateJson.js";
 
-describe("gemini_generate_text", () => {
+describe("gemini_generate_json", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  function createDeps(opts: { debug?: boolean } = {}) {
+  function createDeps() {
     const config = {
       model: "gemini-2.5-flash",
       generation: {
@@ -24,7 +25,7 @@ describe("gemini_generate_text", () => {
         maxTokensPerRequest: 2048,
         maxInputChars: 10_000,
       },
-      logging: { debug: Boolean(opts.debug) },
+      logging: { debug: false },
     } as unknown as BridgeConfig;
 
     const logger: Logger = {
@@ -39,46 +40,19 @@ describe("gemini_generate_text", () => {
       logger,
       rateLimiter: { checkOrThrow: vi.fn().mockResolvedValue(undefined) },
       dailyBudget: new DailyTokenBudget({ maxTokensPerDay: 1_000_000 }),
-      conversationStore: {
-        toRequestContents: vi.fn().mockReturnValue([]),
-        append: vi.fn(),
-      },
+      conversationStore: new ConversationStore({
+        maxTurns: 10,
+        maxTotalChars: 10_000,
+      }),
     };
   }
 
-  it("returns an error with diagnostics when the API returns no text", async () => {
-    const deps = createDeps();
-    const client = {
-      generateContent: vi.fn().mockResolvedValue({
-        promptFeedback: { blockReason: "SAFETY" },
-        usageMetadata: { totalTokenCount: 59, promptTokenCount: 59 },
-      }),
-      takeNotices: () => [],
-    };
-
-    vi.spyOn(toolHelpers, "createGeminiClient").mockResolvedValue(
-      client as unknown as GeminiClient,
-    );
-
-    const handler = createGenerateTextHandler(
-      deps as unknown as Parameters<typeof createGenerateTextHandler>[0],
-    );
-    const result = await handler({ prompt: "Hello", maxTokens: 50 });
-
-    expect(result).toHaveProperty("isError", true);
-    expect(result).toHaveProperty("content");
-    expect(result.content[0]?.type).toBe("text");
-    expect(result.content[0]?.text).toContain("No text returned by model");
-    expect(result.content[0]?.text).toContain("blockReason=SAFETY");
-    expect(result.content[0]?.text).toContain("[usage]");
-  });
-
-  it("treats jsonSchema as an implicit JSON-mode request", async () => {
+  it("returns an error when the model output is not valid JSON", async () => {
     const deps = createDeps();
     const client = {
       generateContent: vi.fn().mockResolvedValue({
         candidates: [
-          { content: { parts: [{ text: '{"a":1}' }] }, finishReason: "STOP" },
+          { content: { parts: [{ text: "not json" }] }, finishReason: "STOP" },
         ],
         usageMetadata: { totalTokenCount: 10, promptTokenCount: 9 },
       }),
@@ -89,31 +63,43 @@ describe("gemini_generate_text", () => {
       client as unknown as GeminiClient,
     );
 
-    const handler = createGenerateTextHandler(
-      deps as unknown as Parameters<typeof createGenerateTextHandler>[0],
+    const handler = createGenerateJsonHandler(
+      deps as unknown as Parameters<typeof createGenerateJsonHandler>[0],
     );
-    const schema = {
-      type: "object",
-      properties: { a: { type: "number" } },
-      required: ["a"],
+    const result = await handler({ prompt: "Return JSON" });
+
+    expect(result).toHaveProperty("isError", true);
+    expect(result.content[0]?.text).toContain("invalid JSON");
+  });
+
+  it("returns structuredContent for valid JSON (code fences allowed)", async () => {
+    const deps = createDeps();
+    const client = {
+      generateContent: vi.fn().mockResolvedValue({
+        candidates: [
+          {
+            content: { parts: [{ text: '```json\n{"a":1}\n```' }] },
+            finishReason: "STOP",
+          },
+        ],
+        usageMetadata: { totalTokenCount: 10, promptTokenCount: 9 },
+      }),
+      takeNotices: () => [],
     };
-    const result = await handler({ prompt: "Return JSON", jsonSchema: schema });
 
-    expect(client.generateContent).toHaveBeenCalledTimes(1);
-    const requestBody = (
-      client.generateContent as unknown as { mock: { calls: unknown[][] } }
-    ).mock.calls[0]?.[1] as
-      | { generationConfig?: Record<string, unknown> }
-      | undefined;
-    expect(requestBody?.generationConfig?.response_mime_type).toBe(
-      "application/json",
+    vi.spyOn(toolHelpers, "createGeminiClient").mockResolvedValue(
+      client as unknown as GeminiClient,
     );
-    expect(requestBody?.generationConfig?.response_json_schema).toEqual(schema);
 
-    expect(result).not.toHaveProperty("isError", true);
-    expect(result.content[0]?.text).toBe('{"a":1}');
-    expect(result.content[0]?.text).not.toContain("[usage]");
-    expect(result.content.some((c) => c.text.includes("[usage]"))).toBe(true);
+    const handler = createGenerateJsonHandler(
+      deps as unknown as Parameters<typeof createGenerateJsonHandler>[0],
+    );
+    const result = await handler({ prompt: "Return JSON" });
+
+    expect(result).toHaveProperty("structuredContent");
+    expect(
+      (result as unknown as { structuredContent: unknown }).structuredContent,
+    ).toEqual({ a: 1 });
   });
 
   it("unwraps jsonSchema.schema for compatibility", async () => {
@@ -121,7 +107,10 @@ describe("gemini_generate_text", () => {
     const client = {
       generateContent: vi.fn().mockResolvedValue({
         candidates: [
-          { content: { parts: [{ text: '{"a":1}' }] }, finishReason: "STOP" },
+          {
+            content: { parts: [{ text: '{"a":1}' }] },
+            finishReason: "STOP",
+          },
         ],
         usageMetadata: { totalTokenCount: 10, promptTokenCount: 9 },
       }),
@@ -132,15 +121,15 @@ describe("gemini_generate_text", () => {
       client as unknown as GeminiClient,
     );
 
-    const handler = createGenerateTextHandler(
-      deps as unknown as Parameters<typeof createGenerateTextHandler>[0],
+    const handler = createGenerateJsonHandler(
+      deps as unknown as Parameters<typeof createGenerateJsonHandler>[0],
     );
     const innerSchema = {
       type: "object",
       properties: { a: { type: "number" } },
       required: ["a"],
     };
-    const result = await handler({
+    await handler({
       prompt: "Return JSON",
       jsonSchema: { name: "Example", schema: innerSchema, strict: true },
     });
@@ -154,6 +143,5 @@ describe("gemini_generate_text", () => {
     expect(requestBody?.generationConfig?.response_json_schema).toEqual(
       innerSchema,
     );
-    expect(result.content[0]?.text).toBe('{"a":1}');
   });
 });

@@ -53,6 +53,13 @@ export function registerListModelsTool(
 }
 
 export function createListModelsHandler(deps: Dependencies) {
+  return createListModelsHandlerForTool(deps, "gemini_list_models");
+}
+
+export function createListModelsHandlerForTool(
+  deps: Dependencies,
+  toolName: string,
+) {
   const toolDeps: ToolDependencies = deps;
 
   return async ({
@@ -64,12 +71,12 @@ export function createListModelsHandler(deps: Dependencies) {
     pageToken?: string;
     filter?: CuratedModelFilter;
   }) => {
-    return withToolErrorHandling("gemini_list_models", toolDeps, async () => {
+    return withToolErrorHandling(toolName, toolDeps, async () => {
       if (filter) {
         // Still check rate limits for curated queries to prevent abuse
         await deps.rateLimiter.checkOrThrow();
         const curated = sortModelsNewToOld(listCuratedGeminiModels(filter));
-        await deps.dailyBudget.commit("gemini_list_models", 0);
+        await deps.dailyBudget.commit(toolName, 0);
         const usage = await deps.dailyBudget.getUsage();
         const usageFooter = formatUsageFooter(0, usage);
         const payload = { source: "curated", filter, models: curated };
@@ -92,7 +99,7 @@ export function createListModelsHandler(deps: Dependencies) {
             ? { ...response, models: sortModelsNewToOld(response.models) }
             : response;
 
-        await deps.dailyBudget.commit("gemini_list_models", 0);
+        await deps.dailyBudget.commit(toolName, 0);
         const usage = await deps.dailyBudget.getUsage();
         const usageFooter = formatUsageFooter(0, usage);
         const warnings = takeAuthFallbackWarnings(client);
@@ -106,7 +113,7 @@ export function createListModelsHandler(deps: Dependencies) {
         };
       } catch (error) {
         const curated = sortModelsNewToOld(listCuratedGeminiModels("all"));
-        await deps.dailyBudget.commit("gemini_list_models", 0);
+        await deps.dailyBudget.commit(toolName, 0);
         const usage = await deps.dailyBudget.getUsage();
         const usageFooter = formatUsageFooter(0, usage);
         const message = redactString(

@@ -43,10 +43,17 @@ export function registerEmbedTextTool(
 }
 
 export function createEmbedTextHandler(deps: Dependencies) {
+  return createEmbedTextHandlerForTool(deps, "gemini_embed_text");
+}
+
+export function createEmbedTextHandlerForTool(
+  deps: Dependencies,
+  toolName: string,
+) {
   const toolDeps: ToolDependencies = deps;
 
   return async ({ text, model }: { text: string; model?: string }) => {
-    return withToolErrorHandling("gemini_embed_text", toolDeps, async () => {
+    return withToolErrorHandling(toolName, toolDeps, async () => {
       const inputError = validateInputSize(
         text,
         deps.config.limits.maxInputChars,
@@ -75,7 +82,7 @@ export function createEmbedTextHandler(deps: Dependencies) {
                 });
 
           await deps.dailyBudget.commit(
-            "gemini_embed_text",
+            toolName,
             estimatedTokens,
             undefined,
             reservation,

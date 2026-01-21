@@ -20,6 +20,7 @@ export type GeminiCandidate = {
   content?: GeminiContent;
   finishReason?: string;
   safetyRatings?: unknown[];
+  groundingMetadata?: unknown;
 };
 
 export type GeminiUsageMetadata = {
@@ -102,7 +103,9 @@ export function extractUsage(response: unknown): GeminiUsage {
   };
 }
 
-export function extractPromptBlockReason(response: unknown): string | undefined {
+export function extractPromptBlockReason(
+  response: unknown,
+): string | undefined {
   if (!isRecord(response)) return undefined;
   const promptFeedback = response.promptFeedback;
   if (!isRecord(promptFeedback)) return undefined;
@@ -132,4 +135,42 @@ export function extractFirstCandidateFinishReason(
   if (!isRecord(firstCandidate)) return undefined;
   const finishReason = firstCandidate.finishReason;
   return typeof finishReason === "string" ? finishReason : undefined;
+}
+
+export function extractPromptSafetyRatings(
+  response: unknown,
+): unknown[] | undefined {
+  if (!isRecord(response)) return undefined;
+  const promptFeedback = response.promptFeedback;
+  if (!isRecord(promptFeedback)) return undefined;
+  const ratings = promptFeedback.safetyRatings;
+  return Array.isArray(ratings) ? ratings : undefined;
+}
+
+export function extractFirstCandidateSafetyRatings(
+  response: unknown,
+): unknown[] | undefined {
+  if (!isRecord(response)) return undefined;
+  const candidates = response.candidates;
+  if (!Array.isArray(candidates) || candidates.length === 0) return undefined;
+  const firstCandidate = candidates[0];
+  if (!isRecord(firstCandidate)) return undefined;
+  const ratings = firstCandidate.safetyRatings;
+  return Array.isArray(ratings) ? ratings : undefined;
+}
+
+export function extractGroundingMetadata(response: unknown): unknown {
+  if (!isRecord(response)) return undefined;
+  if ("groundingMetadata" in response) {
+    return (response as { groundingMetadata?: unknown }).groundingMetadata;
+  }
+  const candidates = response.candidates;
+  if (!Array.isArray(candidates) || candidates.length === 0) return undefined;
+  const firstCandidate = candidates[0];
+  if (!isRecord(firstCandidate)) return undefined;
+  if ("groundingMetadata" in firstCandidate) {
+    return (firstCandidate as { groundingMetadata?: unknown })
+      .groundingMetadata;
+  }
+  return undefined;
 }

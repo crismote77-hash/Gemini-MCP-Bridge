@@ -140,8 +140,12 @@ export class GeminiClient {
         } catch {
           const contentType = response.headers.get("content-type") ?? "";
           const snippet = truncate(raw, 200);
-          const contentTypeLabel = contentType ? `; content-type ${contentType}` : "";
-          const snippetLabel = snippet ? ` Body starts with: ${JSON.stringify(snippet)}.` : "";
+          const contentTypeLabel = contentType
+            ? `; content-type ${contentType}`
+            : "";
+          const snippetLabel = snippet
+            ? ` Body starts with: ${JSON.stringify(snippet)}.`
+            : "";
           throw new GeminiApiError(
             `Non-JSON response from Gemini API (HTTP ${response.status}${contentTypeLabel}).${snippetLabel}`,
             response.status,
@@ -152,9 +156,8 @@ export class GeminiClient {
       if (!response.ok) {
         const message = (() => {
           if (typeof parsed === "object" && parsed && "error" in parsed) {
-            const parsedMessage = (
-              parsed as { error?: { message?: string } }
-            ).error?.message;
+            const parsedMessage = (parsed as { error?: { message?: string } })
+              .error?.message;
             if (parsedMessage && parsedMessage.trim()) return parsedMessage;
           }
           return raw ? truncate(raw, 500) : `HTTP ${response.status}`;
@@ -218,6 +221,239 @@ export class GeminiClient {
       path: `/models/${encodeURIComponent(normalizedModel)}:generateContent`,
       body,
     });
+  }
+
+  async *streamGenerateContent<T>(
+    model: string,
+    body: unknown,
+    opts?: { signal?: AbortSignal },
+  ): AsyncGenerator<T, void, void> {
+    const normalizedModel = this.normalizeModelName(model);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    const onAbort = () => controller.abort();
+    if (opts?.signal) {
+      if (opts.signal.aborted) controller.abort();
+      else opts.signal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    const truncate = (value: string, maxChars: number): string => {
+      const trimmed = value.trim();
+      if (trimmed.length <= maxChars) return trimmed;
+      return `${trimmed.slice(0, maxChars)}…`;
+    };
+
+    const start = async (prefer: "oauth" | "apiKey"): Promise<Response> => {
+      const baseUrl =
+        prefer === "apiKey" && this.apiKeyFallbackBaseUrl
+          ? this.apiKeyFallbackBaseUrl
+          : this.baseUrl;
+      const url = new URL(
+        baseUrl +
+          `/models/${encodeURIComponent(normalizedModel)}:streamGenerateContent`,
+      );
+      const headers = this.buildHeaders(prefer);
+      headers.Accept = "text/event-stream";
+      const response = await fetch(url.toString(), {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const raw = await response.text();
+        let parsed: unknown = undefined;
+        if (raw) {
+          try {
+            parsed = JSON.parse(raw) as unknown;
+          } catch {
+            const contentType = response.headers.get("content-type") ?? "";
+            const snippet = truncate(raw, 200);
+            const contentTypeLabel = contentType
+              ? `; content-type ${contentType}`
+              : "";
+            const snippetLabel = snippet
+              ? ` Body starts with: ${JSON.stringify(snippet)}.`
+              : "";
+            throw new GeminiApiError(
+              `Non-JSON response from Gemini API (HTTP ${response.status}${contentTypeLabel}).${snippetLabel}`,
+              response.status,
+              { contentType, snippet },
+            );
+          }
+        }
+        const message = (() => {
+          if (typeof parsed === "object" && parsed && "error" in parsed) {
+            const parsedMessage = (parsed as { error?: { message?: string } })
+              .error?.message;
+            if (parsedMessage && parsedMessage.trim()) return parsedMessage;
+          }
+          return raw ? truncate(raw, 500) : `HTTP ${response.status}`;
+        })();
+        throw new GeminiApiError(message, response.status, parsed);
+      }
+
+      if (!response.body) {
+        throw new GeminiApiError(
+          "Empty response body from Gemini streaming API.",
+          500,
+        );
+      }
+
+      return response;
+    };
+
+    try {
+      const response = await (async (): Promise<Response> => {
+        if (!this.accessToken) return start("apiKey");
+        try {
+          return await start("oauth");
+        } catch (error) {
+          const primaryError = error;
+          const shouldRetry =
+            this.allowApiKeyFallback &&
+            this.apiKey &&
+            primaryError instanceof GeminiApiError &&
+            (primaryError.status === 401 ||
+              primaryError.status === 403 ||
+              primaryError.status === 429 ||
+              primaryError.status === 402);
+          if (!shouldRetry) throw primaryError;
+
+          this.logger.debug("Retrying Gemini streaming request with API key", {
+            status: primaryError.status,
+            path: `/models/${normalizedModel}:streamGenerateContent`,
+          });
+
+          const fallback = await start("apiKey");
+          this.notices.push({
+            type: "auth_fallback",
+            from: "oauth",
+            to: "apiKey",
+            status: primaryError.status,
+            message: primaryError.message || "",
+          });
+          return fallback;
+        }
+      })();
+
+      if (!response.body) {
+        throw new GeminiApiError(
+          "Empty response body from Gemini streaming API.",
+          500,
+        );
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let sawSseData = false;
+      let finished = false;
+
+      const emitJson = (raw: string) => {
+        const trimmed = raw.trim();
+        if (!trimmed) return;
+        if (trimmed === "[DONE]") {
+          finished = true;
+          return;
+        }
+        try {
+          const parsed = JSON.parse(trimmed) as T;
+          return parsed;
+        } catch (error) {
+          const snippet = truncate(trimmed, 200);
+          const message =
+            error instanceof Error ? error.message : String(error);
+          throw new GeminiApiError(
+            `Non-JSON event from Gemini streaming API: ${message}. Body starts with: ${JSON.stringify(snippet)}.`,
+            500,
+            { snippet },
+          );
+        }
+      };
+
+      while (!finished) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        while (true) {
+          const idxLf = buffer.indexOf("\n\n");
+          const idxCrLf = buffer.indexOf("\r\n\r\n");
+          const idx =
+            idxCrLf !== -1 && (idxLf === -1 || idxCrLf < idxLf)
+              ? idxCrLf
+              : idxLf;
+          if (idx === -1) break;
+          const delimiterLength = idx === idxCrLf ? 4 : 2;
+          const rawEvent = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + delimiterLength);
+
+          const lines = rawEvent.split(/\r?\n/);
+          const dataLines = lines
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice("data:".length).trimStart());
+          if (dataLines.length === 0) continue;
+          sawSseData = true;
+
+          const data = dataLines.join("\n");
+          const parsed = emitJson(data);
+          if (finished) break;
+          if (parsed !== undefined) yield parsed;
+        }
+      }
+
+      if (!finished) buffer += decoder.decode();
+
+      if (sawSseData) {
+        const leftover = buffer.trim();
+        if (leftover) {
+          const lines = leftover.split(/\r?\n/);
+          const dataLines = lines
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice("data:".length).trimStart());
+          if (dataLines.length > 0) {
+            const data = dataLines.join("\n");
+            const parsed = emitJson(data);
+            if (!finished && parsed !== undefined) yield parsed;
+          }
+        }
+        return;
+      }
+
+      const trimmed = buffer.trim();
+      if (!trimmed) return;
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            yield item as T;
+          }
+          return;
+        }
+        yield parsed as T;
+      } catch (error) {
+        const snippet = truncate(trimmed, 200);
+        const message = error instanceof Error ? error.message : String(error);
+        throw new GeminiApiError(
+          `Non-JSON response from Gemini streaming API: ${message}. Body starts with: ${JSON.stringify(snippet)}.`,
+          500,
+          { snippet },
+        );
+      }
+    } catch (error) {
+      if (error instanceof GeminiApiError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error("Gemini streaming request failed", { error: message });
+      throw new GeminiApiError(message, 500);
+    } finally {
+      clearTimeout(timeout);
+      if (opts?.signal) {
+        opts.signal.removeEventListener("abort", onAbort);
+      }
+    }
   }
 
   async countTokens<T>(model: string, body: unknown): Promise<T> {
@@ -314,14 +550,15 @@ export class GeminiClient {
     const version = parts[0];
 
     const idxLocations = parts.indexOf("locations");
-    const location =
-      idxLocations !== -1 ? (parts[idxLocations + 1] ?? "") : "";
+    const location = idxLocations !== -1 ? (parts[idxLocations + 1] ?? "") : "";
     const idxPublishers = parts.indexOf("publishers");
     const publisher =
       idxPublishers !== -1 ? (parts[idxPublishers + 1] ?? "") : "";
 
     const globalHost = "aiplatform.googleapis.com";
-    const regionHost = location ? `${location}-aiplatform.googleapis.com` : host;
+    const regionHost = location
+      ? `${location}-aiplatform.googleapis.com`
+      : host;
 
     const versions: string[] = [];
     if (version) versions.push(version);

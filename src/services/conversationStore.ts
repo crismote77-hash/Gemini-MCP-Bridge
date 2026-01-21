@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 export type ContentPart = {
   text?: string;
   inlineData?: { mimeType: string; data: string };
@@ -12,6 +14,13 @@ type ConversationState = {
   id: string;
   contents: ContentMessage[];
   updatedAt: string;
+};
+
+export type ConversationSummary = {
+  id: string;
+  updatedAt: string;
+  turns: number;
+  totalChars: number;
 };
 
 export class ConversationStore {
@@ -33,6 +42,54 @@ export class ConversationStore {
 
   get(id: string): ConversationState | undefined {
     return this.conversations.get(id);
+  }
+
+  create(id?: string): ConversationState {
+    const provided = id?.trim();
+    if (provided) {
+      const existing = this.conversations.get(provided);
+      if (existing) {
+        this.lastActiveId = provided;
+        return existing;
+      }
+      const now = new Date(this.nowMs()).toISOString();
+      const state = { id: provided, contents: [], updatedAt: now };
+      this.conversations.set(provided, state);
+      this.lastActiveId = provided;
+      return state;
+    }
+
+    let generated = randomUUID();
+    while (this.conversations.has(generated)) {
+      generated = randomUUID();
+    }
+    const now = new Date(this.nowMs()).toISOString();
+    const state = { id: generated, contents: [], updatedAt: now };
+    this.conversations.set(generated, state);
+    this.lastActiveId = generated;
+    return state;
+  }
+
+  listSummaries(limit = 50): ConversationSummary[] {
+    const summaries = Array.from(this.conversations.values()).map((state) => ({
+      id: state.id,
+      updatedAt: state.updatedAt,
+      turns: state.contents.length,
+      totalChars: this.totalChars(state.contents),
+    }));
+    summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return summaries.slice(0, Math.max(0, Math.trunc(limit)));
+  }
+
+  getCurrentId(): string | null {
+    return this.lastActiveId;
+  }
+
+  setCurrent(id: string): ConversationState | null {
+    const trimmed = id.trim();
+    const existing = this.conversations.get(trimmed) ?? null;
+    if (existing) this.lastActiveId = trimmed;
+    return existing;
   }
 
   reset(id: string): void {

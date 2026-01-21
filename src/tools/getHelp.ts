@@ -49,7 +49,7 @@ export function createGetHelpHandler() {
         return {
           content: [
             textBlock(
-              "Tools: gemini_generate_text, gemini_analyze_image, gemini_embed_text, gemini_count_tokens, gemini_list_models, gemini_get_help",
+              "Tools: gemini_generate_text, gemini_generate_text_stream, gemini_generate_json, gemini_analyze_image, gemini_embed_text, gemini_embed_text_batch, gemini_count_tokens, gemini_count_tokens_batch, gemini_list_models, gemini_moderate_text, gemini_conversation_create, gemini_conversation_list, gemini_conversation_export, gemini_conversation_reset, gemini_get_help, plus provider-agnostic aliases prefixed with llm_ (llm_generate_text, llm_generate_text_stream, llm_generate_json, llm_analyze_image, llm_embed_text, llm_embed_text_batch, llm_count_tokens, llm_count_tokens_batch, llm_list_models, llm_moderate_text, llm_conversation_*).",
             ),
           ],
         };
@@ -57,7 +57,7 @@ export function createGetHelpHandler() {
         return {
           content: [
             textBlock(
-              "gemini_list_models without filter tries the Gemini API listModels call and falls back to curated metadata on failure. gemini_list_models with filter (all|thinking|vision|grounding|json_mode) returns curated capability filtering.",
+              "gemini_list_models without filter tries the Gemini API listModels call and falls back to curated metadata on failure. gemini_list_models with filter (all|thinking|vision|grounding|json_mode) returns curated capability filtering. For per-model curated capabilities, read gemini://model-capabilities or gemini://model/{name}.",
             ),
           ],
         };

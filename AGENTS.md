@@ -21,11 +21,11 @@ If this repo also contains `CLAUDE.md`, keep both files consistent.
 
 ## 1) Project Overview
 
-`gemini-mcp-bridge` is a local MCP server that exposes Gemini model capabilities (text generation, image analysis, embeddings, token counting, model listing, help) to other AI CLIs via MCP.
+`gemini-mcp-bridge` is a local MCP server that exposes Gemini model capabilities (text generation + streaming + structured JSON, image analysis, embeddings, token counting, model listing, moderation, conversation memory, and repo-scoped code review/fix) to other AI CLIs via MCP.
 
 Key capabilities:
-- Tools: `gemini_generate_text`, `gemini_analyze_image`, `gemini_embed_text`, `gemini_count_tokens`, `gemini_list_models`, `gemini_get_help`
-- Resources: `usage://stats`, `conversation://current`, `gemini://capabilities`, `gemini://models`, `gemini://help/*`
+- Tools: `gemini_generate_text`, `gemini_generate_text_stream`, `gemini_generate_json`, `gemini_analyze_image`, `gemini_embed_text`, `gemini_embed_text_batch`, `gemini_count_tokens`, `gemini_count_tokens_batch`, `gemini_list_models`, `gemini_moderate_text`, `gemini_conversation_*`, `gemini_code_review`, `gemini_code_fix`, `gemini_get_help`, plus `llm_*` aliases
+- Resources: `usage://stats`, `conversation://*`, `gemini://capabilities`, `gemini://models`, `gemini://model-capabilities`, `gemini://model/{name}`, `gemini://help/*`, `llm://model-capabilities`
 - Backends: Gemini Developer API (API key) and Vertex AI (OAuth/ADC + project/location)
 - Guardrails: rate limits + daily token budgets (optional shared Redis store)
 
@@ -188,3 +188,11 @@ Backend/auth gotchas:
 - Gemini API docs: https://ai.google.dev/api
 - MCP spec (2025-11-25): https://modelcontextprotocol.io/specification/2025-11-25
 - MCP TS SDK: https://github.com/modelcontextprotocol/typescript-sdk
+
+## Task Tracking & Memory (avoid dropped steps)
+- Active tracker: `STATUS.md` (or `PROJECT_STATUS.md` if present).
+- Break work into subtasks with `pending|in_progress|blocked|completed|canceled` (only 1 `in_progress` at a time) and a `DoD` (evidence).
+- Replan is allowed: any list change must include `Reason:` (new fact/blocker/constraint).
+- Archive: when closing a complex task, move the summary to `runbook.md` (append-only).
+- Rotation: if `runbook.md` > 1MB, rename it to `runbook_YYYYMMDD_HHMMSS.md` and start a fresh runbook (keep an index/history at the top of the active runbook).
+- Before execution, do a quick `Planner/Critic/Verifier` pass to freeze the checklist and `DoD` per subtask.

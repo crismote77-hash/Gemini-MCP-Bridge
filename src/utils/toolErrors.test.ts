@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { GeminiApiError } from "../services/geminiClient.js";
 import { formatToolError } from "./toolErrors.js";
 
 describe("formatToolError", () => {
@@ -13,5 +14,12 @@ describe("formatToolError", () => {
       message: "Authorization: Bearer [redacted]",
     });
   });
-});
 
+  it("maps structured output schema crashes to an actionable hint", () => {
+    const err = new GeminiApiError(
+      "Cannot read properties of undefined (reading 'properties')",
+      400,
+    );
+    expect(formatToolError(err).message).toContain("jsonSchema");
+  });
+});

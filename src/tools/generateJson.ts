@@ -29,6 +29,17 @@ import {
   takeAuthFallbackWarnings,
 } from "../utils/toolHelpers.js";
 
+const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
+  z.union([
+    z.record(jsonValueSchema),
+    z.array(jsonValueSchema),
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+  ]),
+);
+
 const safetySettingSchema = z.object({
   category: z.string(),
   threshold: z.string(),
@@ -53,7 +64,7 @@ function contentChars(contents: ContentMessage[]): number {
   }, 0);
 }
 
-export function registerGenerateTextTool(
+export function registerGenerateJsonTool(
   server: McpServer,
   deps: Dependencies,
 ): void {
@@ -61,10 +72,10 @@ export function registerGenerateTextTool(
   const maxInputChars = deps.config.limits.maxInputChars;
   const defaultMaxOutputTokens = deps.config.generation.maxOutputTokens;
   server.registerTool(
-    "gemini_generate_text",
+    "gemini_generate_json",
     {
-      title: "Gemini Generate Text",
-      description: `Generate text with Gemini models. Limits: maxTokens <= ${maxTokensLimit}, total input <= ${maxInputChars} chars.`,
+      title: "Gemini Generate JSON",
+      description: `Generate structured JSON and return it as MCP structuredContent. Limits: maxTokens <= ${maxTokensLimit}, total input <= ${maxInputChars} chars.`,
       inputSchema: {
         prompt: z
           .string()
@@ -91,35 +102,26 @@ export function registerGenerateTextTool(
           .describe(
             `Optional system instruction (counts toward the ${maxInputChars} character total input limit).`,
           ),
-        jsonMode: z
-          .boolean()
-          .optional()
-          .describe("Request JSON output (sets response_mime_type)."),
-        strictJson: z
-          .boolean()
-          .optional()
-          .describe(
-            "Validate that the model output is valid JSON (implies jsonMode).",
-          ),
         jsonSchema: z
           .record(z.unknown())
           .optional()
           .describe(
-            "Optional JSON Schema for structured output (implies jsonMode). Wrapper objects like { schema: {...} } are accepted.",
+            "Optional JSON Schema for structured output. Wrapper objects like { schema: {...} } are accepted.",
           ),
         grounding: z.boolean().optional(),
         includeGroundingMetadata: z.boolean().optional(),
         conversationId: z.string().optional(),
         safetySettings: z.array(safetySettingSchema).optional(),
       },
+      outputSchema: jsonValueSchema,
     },
-    createGenerateTextHandler(deps),
+    createGenerateJsonHandler(deps),
   );
 }
 
-export function createGenerateTextHandler(
+export function createGenerateJsonHandler(
   deps: Dependencies,
-  toolName = "gemini_generate_text",
+  toolName = "gemini_generate_json",
 ) {
   const toolDeps: ToolDependencies = deps;
 
@@ -131,8 +133,6 @@ export function createGenerateTextHandler(
     topK,
     topP,
     systemInstruction,
-    jsonMode,
-    strictJson,
     jsonSchema,
     grounding,
     includeGroundingMetadata,
@@ -146,8 +146,6 @@ export function createGenerateTextHandler(
     topK?: number;
     topP?: number;
     systemInstruction?: string;
-    jsonMode?: boolean;
-    strictJson?: boolean;
     jsonSchema?: Record<string, unknown>;
     grounding?: boolean;
     includeGroundingMetadata?: boolean;
@@ -155,7 +153,6 @@ export function createGenerateTextHandler(
     safetySettings?: Array<{ category: string; threshold: string }>;
   }) => {
     return withToolErrorHandling(toolName, toolDeps, async () => {
-      const wantsJson = Boolean(jsonMode || strictJson || jsonSchema);
       const outputLimit = maxTokens ?? deps.config.generation.maxOutputTokens;
       const tokenError = validateMaxTokens(
         outputLimit,
@@ -178,7 +175,6 @@ export function createGenerateTextHandler(
       if (inputError) return inputError;
 
       const client = await createGeminiClient(toolDeps);
-
       const userMessage: ContentMessage = {
         role: "user",
         parts: [{ text: prompt }],
@@ -201,9 +197,8 @@ export function createGenerateTextHandler(
             topK: topK ?? deps.config.generation.topK,
             topP: topP ?? deps.config.generation.topP,
             maxOutputTokens: outputLimit,
+            response_mime_type: "application/json",
           };
-          if (wantsJson)
-            generationConfig.response_mime_type = "application/json";
           if (jsonSchema) {
             const normalizedSchema = normalizeResponseJsonSchema(jsonSchema);
             if (Object.keys(normalizedSchema).length > 0) {
@@ -225,6 +220,7 @@ export function createGenerateTextHandler(
             model ?? deps.config.model,
             requestBody,
           );
+
           const text = extractText(response);
           const finishReason = extractFirstCandidateFinishReason(response);
           const blockReason = extractPromptBlockReason(response);
@@ -232,7 +228,7 @@ export function createGenerateTextHandler(
           const requestTokens = usage.totalTokens || estimatedInputTokens;
 
           await deps.dailyBudget.commit(
-            "gemini_generate_text",
+            toolName,
             requestTokens,
             undefined,
             reservation,
@@ -257,6 +253,7 @@ export function createGenerateTextHandler(
           const groundingBlock = groundingMetadata
             ? textBlock(JSON.stringify({ groundingMetadata }, null, 2))
             : undefined;
+
           if (!text.trim()) {
             const diagnostics = [
               finishReason ? `finishReason=${finishReason}` : undefined,
@@ -279,35 +276,27 @@ export function createGenerateTextHandler(
               ],
             };
           }
-          if (wantsJson && strictJson) {
-            const parsed = parseJsonFromText(text);
-            if (!parsed.ok) {
-              return {
-                isError: true,
-                content: [
-                  textBlock(
-                    `Model returned invalid JSON (${parsed.error}). Body starts with: ${JSON.stringify(parsed.snippet)}.\n\n${usageFooter}`,
-                  ),
-                  ...(groundingBlock ? [groundingBlock] : []),
-                  ...warnings,
-                ],
-              };
-            }
-          }
-          if (wantsJson) {
+
+          const parsed = parseJsonFromText(text);
+          if (!parsed.ok) {
             return {
+              isError: true,
               content: [
-                textBlock(text),
+                textBlock(
+                  `Model returned invalid JSON (${parsed.error}). Body starts with: ${JSON.stringify(parsed.snippet)}.\n\n${usageFooter}`,
+                ),
                 ...(groundingBlock ? [groundingBlock] : []),
-                textBlock(usageFooter),
                 ...warnings,
               ],
             };
           }
+
           return {
+            structuredContent: parsed.value,
             content: [
-              textBlock(`${text}\n\n${usageFooter}`),
+              textBlock(JSON.stringify(parsed.value, null, 2)),
               ...(groundingBlock ? [groundingBlock] : []),
+              textBlock(usageFooter),
               ...warnings,
             ],
           };

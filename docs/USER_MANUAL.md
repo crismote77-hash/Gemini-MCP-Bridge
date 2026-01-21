@@ -8,7 +8,9 @@ Expose Gemini model capabilities to AI CLIs via MCP. This runs locally but requi
 
 ## Quick Start
 
-1. Install: `npm install -g gemini-mcp-bridge`
+1. Install:
+   - From npm: `npm install -g gemini-mcp-bridge`
+   - From a local clone: `npm install` + `npm run build` + `npm install -g .` (or `npm install -g /path/to/geminiMCPbridge`)
 2. Authenticate:
    - Subscription/OAuth (Vertex): `gcloud auth application-default login` + set `GEMINI_MCP_BACKEND=vertex` + `GEMINI_MCP_VERTEX_PROJECT=...` + `GEMINI_MCP_VERTEX_LOCATION=...`
    - API key (Gemini Developer API): `export GEMINI_API_KEY=...` (or `GOOGLE_API_KEY`)
@@ -33,6 +35,7 @@ Notes:
 - Menu prompts are numbered so you can answer with `1`, `2`, etc.
 - ANSI colors are used for prompts/tips when running in a TTY; set `NO_COLOR=1` to disable.
 - Flags: `--backend`, `--project`, `--location`, `--config`, `--skip-gcloud`, `--non-interactive`.
+- If you run from source without a global install, build first (`npm run build`) and launch with `node dist/index.js --stdio` (or `npm run dev` for watch mode).
 
 ---
 
@@ -65,6 +68,7 @@ To force API key auth, set: `export GEMINI_MCP_AUTH_MODE=apiKey`
 - `GEMINI_API_KEY` (preferred)
 - `GOOGLE_API_KEY` (alternate)
 - `GEMINI_API_KEY_FILE` (path to a key file)
+  - For shared, file-based keys, store it at `~/.gemini-mcp-bridge/api-key` and set `GEMINI_API_KEY_FILE=~/.gemini-mcp-bridge/api-key`.
 
 ### Auth mode
 
@@ -125,6 +129,7 @@ If you’re using the Vertex backend, `YOUR_PROJECT_ID` is typically the same va
 ## CLI Integration
 
 MCP servers run as child processes of your CLI. Make sure any auth/backend env vars (or `~/.gemini-mcp-bridge/config.json`) are available in the environment where your CLI is launched.
+The MCP server name (e.g., `gemini-bridge`) is arbitrary; pick any label and use it consistently in your client config.
 
 **OpenAI Codex CLI** (`~/.codex/config.toml`):
 ```toml
@@ -162,21 +167,35 @@ args = ["--stdio"]
 ## Common Tasks
 
 - Text generation: `Use gemini_generate_text with prompt "..."`
+- Streaming text generation: `Use gemini_generate_text_stream` (emits `notifications/progress` when your MCP client requests progress updates).
+- Structured JSON output: `Use gemini_generate_json` (returns parsed JSON via MCP `structuredContent`).
 - Image analysis: `Use gemini_analyze_image with prompt "..." and imageUrl "..."`
 - Embeddings: `Use gemini_embed_text with text "..."`
+- Batch embeddings: `Use gemini_embed_text_batch with texts ["...","..."]`
 - Model list: `Use gemini_list_models` (optional filter: `all|thinking|vision|grounding|json_mode`)
   - If you don’t see a model you expect, increase `limit` or follow `nextPageToken` with `pageToken`.
   - Results are sorted newest → oldest (best-effort).
   - Curated metadata auto-refreshes daily when API credentials are available.
 - Token count: `Use gemini_count_tokens`
+- Batch token count: `Use gemini_count_tokens_batch with texts ["...","..."]`
+- Safety metadata: `Use gemini_moderate_text` (best-effort safety/block metadata; does not replace policy enforcement).
+- Repo code review: `Use gemini_code_review` (server reads files; requires `filesystem.mode=repo` + MCP roots).
+- Repo code fixes: `Use gemini_code_fix` (returns a unified diff for approval; optional auto-apply with `filesystem.allowWrite=true`).
+- Conversation threads: `gemini_conversation_create`, `gemini_conversation_list`, `gemini_conversation_export`, `gemini_conversation_reset`
+  - Resources: `conversation://list`, `conversation://current`, `conversation://history/{id}`
+- Model capabilities: read `gemini://model-capabilities` (and `gemini://model/{name}`) for curated per-model modality/context info.
+- Provider-agnostic aliases: `llm_*` tools mirror the Gemini tools (useful for clients that want stable names across providers).
 
 ---
 
 ## Troubleshooting
 
 - If `gemini_generate_text` or `gemini_analyze_image` returns “No text returned by model”, check the reported `blockReason` / `finishReason` and try a different prompt or model.
+- If you hit `maxTokens exceeds configured limit`, lower `maxTokens` or raise the cap (`GEMINI_MCP_MAX_TOKENS` / `limits.maxTokensPerRequest`). Limits are discoverable via `gemini://capabilities` and are also encoded in the MCP tool schemas as `maximum` so clients can auto-respect them.
+- If structured output fails with an error about `properties` being undefined, your `jsonSchema` is likely invalid/unsupported. Try omitting `jsonSchema`, simplifying it (type `object` + `properties` + `required`), and/or choosing a model with `json_mode` support (`gemini_list_models` filter=`json_mode`).
 - If `gemini_analyze_image` fails to fetch an `imageUrl` (e.g. 403/404), download the image and pass `imageBase64` + `mimeType` instead.
 - Set `GEMINI_MCP_DEBUG=1` to include raw API responses in some error outputs (secrets are redacted).
+- If you see “Filesystem access is disabled” or “No MCP roots available”, set `GEMINI_MCP_FS_MODE=repo` and ensure your MCP client provides roots (roots/list). For machine-wide paths, set `GEMINI_MCP_FS_MODE=system` and `GEMINI_MCP_FS_ALLOW_SYSTEM=1` (high risk).
 
 ---
 
@@ -215,7 +234,7 @@ Generation defaults:
 - `GEMINI_MCP_MAX_OUTPUT_TOKENS`
 
 Limits:
-- `GEMINI_MCP_MAX_TOKENS` (hard cap for maxTokens per request)
+- `GEMINI_MCP_MAX_TOKENS` (hard cap for maxTokens per request, default: 8192)
 - `GEMINI_MCP_MAX_INPUT_CHARS` (includes prompt + system instruction + conversation history)
 - `GEMINI_MCP_MAX_REQUESTS_PER_MINUTE`
 - `GEMINI_MCP_DAILY_TOKEN_LIMIT`
@@ -238,6 +257,19 @@ Conversation:
 - `GEMINI_MCP_CONVERSATION_MAX_TURNS`
 - `GEMINI_MCP_CONVERSATION_MAX_CHARS`
 
+Filesystem (optional; high risk when enabled):
+- `GEMINI_MCP_FS_MODE` (off|repo|system, default: off)
+  - `repo` uses MCP roots (roots/list) as the allowlist (recommended for `gemini_code_review` / `gemini_code_fix`).
+  - `system` allows machine-wide paths (requires explicit opt-in via `GEMINI_MCP_FS_ALLOW_SYSTEM=1`).
+- `GEMINI_MCP_FS_ALLOW_WRITE` (enable auto-apply for `gemini_code_fix`, default: false)
+- `GEMINI_MCP_FS_ALLOW_SYSTEM` (required for filesystem.mode=system, default: false)
+- `GEMINI_MCP_FS_FOLLOW_SYMLINKS` (default: false)
+- `GEMINI_MCP_FS_MAX_FILES` (default: 25)
+- `GEMINI_MCP_FS_MAX_FILE_BYTES` (default: 200000)
+- `GEMINI_MCP_FS_MAX_TOTAL_BYTES` (default: 2000000)
+- `GEMINI_MCP_FS_ALLOWED_EXTENSIONS` (comma-separated allowlist for directory traversal)
+- `GEMINI_MCP_FS_DENY_PATTERNS` (comma-separated deny patterns; defaults block common secret/credential paths)
+
 Transport/logging:
 - `GEMINI_MCP_TRANSPORT` (stdio|http)
 - `GEMINI_MCP_HTTP_HOST`
@@ -254,13 +286,22 @@ Advanced auth env mapping (for overriding which env vars to read credentials fro
 
 ## Tools Reference
 
-- `gemini_generate_text`: prompt + generation settings, JSON mode, grounding, safety settings, conversationId.
-- `gemini_analyze_image`: prompt + imageUrl/imageBase64 + mimeType + optional maxTokens.
-- `gemini_embed_text`: text embeddings (Vertex backend uses the Vertex `predict` API for embedding models).
+- `gemini_generate_text`: core text generation (supports JSON mode + strict JSON validation, grounding metadata, conversationId).
+- `gemini_generate_text_stream`: streaming generation (progress notifications when requested by the client).
+- `gemini_generate_json`: strict JSON output via `structuredContent`.
+- `gemini_analyze_image`: multimodal prompts (imageUrl or imageBase64 + mimeType).
+- `gemini_embed_text`: embeddings (Developer: embedContent; Vertex: predict).
+- `gemini_embed_text_batch`: batch embeddings (best-effort per item).
 - `gemini_count_tokens`: token counting via API.
-- `gemini_list_models`: list available models (optional filter: `all|thinking|vision|grounding|json_mode` for curated metadata).
-  - Curated metadata is cached under `~/.gemini-mcp-bridge/curated-models.json`.
-- `gemini_get_help`: built-in help topics.
+- `gemini_count_tokens_batch`: batch token counting (best-effort per item).
+- `gemini_list_models`: list models via API (with curated filters/fallback).
+- `gemini_moderate_text`: safety/block metadata (best-effort).
+- `gemini_code_review`: review local repo code (server reads files; requires filesystem.mode=repo + MCP roots).
+- `gemini_code_fix`: propose fixes as a unified diff (optional auto-apply; requires filesystem.allowWrite=true). Auto-apply currently refuses new files and deletions.
+- `gemini_conversation_create|list|export|reset`: in-memory conversation management for `conversationId` flows.
+- `gemini_get_help`: built-in help text.
+- `llm_*`: provider-agnostic aliases for the tools above.
+- Curated metadata for `gemini_list_models` is cached under `~/.gemini-mcp-bridge/curated-models.json`.
 
 ## Prompts
 
@@ -271,9 +312,14 @@ Advanced auth env mapping (for overriding which env vars to read credentials fro
 ## Resources
 
 - `usage://stats`: usage and per-tool counts.
+- `conversation://list`: known conversation threads (in this server session).
 - `conversation://current`: last active conversation state.
+- `conversation://history/{id}`: conversation history by id.
 - `gemini://capabilities`: server capabilities and limits.
 - `gemini://models`: configured defaults.
+- `gemini://model-capabilities`: curated per-model capabilities.
+- `gemini://model/{name}`: curated capabilities for a single model.
+- `llm://model-capabilities`: provider-agnostic capabilities reference.
 - `gemini://help/*`: usage, parameters, examples.
 
 ## Maintainers: Daily Gemini API radar (GitHub)

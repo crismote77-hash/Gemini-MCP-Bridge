@@ -41,10 +41,17 @@ export function registerCountTokensTool(
 }
 
 export function createCountTokensHandler(deps: Dependencies) {
+  return createCountTokensHandlerForTool(deps, "gemini_count_tokens");
+}
+
+export function createCountTokensHandlerForTool(
+  deps: Dependencies,
+  toolName: string,
+) {
   const toolDeps: ToolDependencies = deps;
 
   return async ({ text, model }: { text: string; model?: string }) => {
-    return withToolErrorHandling("gemini_count_tokens", toolDeps, async () => {
+    return withToolErrorHandling(toolName, toolDeps, async () => {
       const inputError = validateInputSize(
         text,
         deps.config.limits.maxInputChars,
@@ -61,7 +68,7 @@ export function createCountTokensHandler(deps: Dependencies) {
         },
       );
 
-      await deps.dailyBudget.commit("gemini_count_tokens", 0);
+      await deps.dailyBudget.commit(toolName, 0);
       const usage = await deps.dailyBudget.getUsage();
       const usageFooter = formatUsageFooter(0, usage);
       const warnings = takeAuthFallbackWarnings(client);

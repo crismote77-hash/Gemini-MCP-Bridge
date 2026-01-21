@@ -6,6 +6,7 @@ import type { ConversationStore } from "../services/conversationStore.js";
 import { registerUsageResource } from "./usage.js";
 import { registerConversationResource } from "./conversation.js";
 import { registerDiscoveryResources } from "./discovery.js";
+import { registerModelCapabilitiesResources } from "./modelCapabilities.js";
 
 export function registerResources(
   server: McpServer,
@@ -19,5 +20,6 @@ export function registerResources(
 ): void {
   registerUsageResource(server, deps.dailyBudget, deps.logger);
   registerConversationResource(server, deps.conversationStore, deps.logger);
+  registerModelCapabilitiesResources(server, deps.config, deps.logger);
   registerDiscoveryResources(server, deps.config, deps.info, deps.logger);
 }

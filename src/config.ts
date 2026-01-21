@@ -6,6 +6,7 @@ import { isRecord } from "./utils/typeGuards.js";
 const transportModeSchema = z.enum(["stdio", "http"]);
 const authModeSchema = z.enum(["apiKey", "oauth", "auto"]);
 const backendSchema = z.enum(["developer", "vertex"]);
+const filesystemModeSchema = z.enum(["off", "repo", "system"]);
 
 const configSchema = z
   .object({
@@ -45,7 +46,7 @@ const configSchema = z
       .default({}),
     limits: z
       .object({
-        maxTokensPerRequest: z.number().int().positive().default(2048),
+        maxTokensPerRequest: z.number().int().positive().default(8192),
         maxInputChars: z.number().int().positive().default(10000),
         maxRequestsPerMinute: z.number().int().positive().default(30),
         maxTokensPerDay: z.number().int().positive().default(200000),
@@ -72,6 +73,81 @@ const configSchema = z
       .object({
         maxTurns: z.number().int().positive().default(20),
         maxTotalChars: z.number().int().positive().default(20000),
+      })
+      .default({}),
+    filesystem: z
+      .object({
+        mode: filesystemModeSchema.default("off"),
+        allowWrite: z.boolean().default(false),
+        allowSystem: z.boolean().default(false),
+        followSymlinks: z.boolean().default(false),
+        maxFiles: z.number().int().positive().default(25),
+        maxFileBytes: z.number().int().positive().default(200_000),
+        maxTotalBytes: z.number().int().positive().default(2_000_000),
+        allowedExtensions: z
+          .array(z.string())
+          .default([
+            ".ts",
+            ".tsx",
+            ".js",
+            ".jsx",
+            ".mjs",
+            ".cjs",
+            ".json",
+            ".md",
+            ".yaml",
+            ".yml",
+            ".toml",
+            ".html",
+            ".css",
+            ".scss",
+            ".py",
+            ".go",
+            ".rs",
+            ".java",
+            ".kt",
+            ".cs",
+            ".c",
+            ".h",
+            ".cpp",
+            ".hpp",
+            ".sh",
+            ".bash",
+            ".zsh",
+            ".ps1",
+            ".rb",
+            ".php",
+            ".swift",
+            ".scala",
+            ".sql",
+          ]),
+        denyPatterns: z
+          .array(z.string())
+          .default([
+            "**/.git/**",
+            "**/.hg/**",
+            "**/.svn/**",
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/.env",
+            "**/.env.*",
+            "**/.npmrc",
+            "**/.pypirc",
+            "**/.netrc",
+            "**/.ssh/**",
+            "**/application_default_credentials.json",
+            "**/credentials.json",
+            "**/client_secret*.json",
+            "**/*service-account*.json",
+            "**/*service_account*.json",
+            "**/*.pem",
+            "**/*.key",
+            "**/*.p12",
+            "**/*.pfx",
+            "**/id_rsa",
+            "**/id_ed25519",
+          ]),
       })
       .default({}),
     logging: z
@@ -392,6 +468,61 @@ export function loadConfig(
         env.GEMINI_MCP_CONVERSATION_MAX_CHARS,
         "GEMINI_MCP_CONVERSATION_MAX_CHARS",
       ),
+    };
+
+  if (env.GEMINI_MCP_FS_MODE)
+    merged.filesystem = {
+      ...(merged.filesystem as object),
+      mode: env.GEMINI_MCP_FS_MODE,
+    };
+  if (env.GEMINI_MCP_FS_ALLOW_WRITE)
+    merged.filesystem = {
+      ...(merged.filesystem as object),
+      allowWrite: parseBooleanEnv(env.GEMINI_MCP_FS_ALLOW_WRITE),
+    };
+  if (env.GEMINI_MCP_FS_ALLOW_SYSTEM)
+    merged.filesystem = {
+      ...(merged.filesystem as object),
+      allowSystem: parseBooleanEnv(env.GEMINI_MCP_FS_ALLOW_SYSTEM),
+    };
+  if (env.GEMINI_MCP_FS_FOLLOW_SYMLINKS)
+    merged.filesystem = {
+      ...(merged.filesystem as object),
+      followSymlinks: parseBooleanEnv(env.GEMINI_MCP_FS_FOLLOW_SYMLINKS),
+    };
+  if (env.GEMINI_MCP_FS_MAX_FILES)
+    merged.filesystem = {
+      ...(merged.filesystem as object),
+      maxFiles: parseIntEnv(
+        env.GEMINI_MCP_FS_MAX_FILES,
+        "GEMINI_MCP_FS_MAX_FILES",
+      ),
+    };
+  if (env.GEMINI_MCP_FS_MAX_FILE_BYTES)
+    merged.filesystem = {
+      ...(merged.filesystem as object),
+      maxFileBytes: parseIntEnv(
+        env.GEMINI_MCP_FS_MAX_FILE_BYTES,
+        "GEMINI_MCP_FS_MAX_FILE_BYTES",
+      ),
+    };
+  if (env.GEMINI_MCP_FS_MAX_TOTAL_BYTES)
+    merged.filesystem = {
+      ...(merged.filesystem as object),
+      maxTotalBytes: parseIntEnv(
+        env.GEMINI_MCP_FS_MAX_TOTAL_BYTES,
+        "GEMINI_MCP_FS_MAX_TOTAL_BYTES",
+      ),
+    };
+  if (env.GEMINI_MCP_FS_ALLOWED_EXTENSIONS)
+    merged.filesystem = {
+      ...(merged.filesystem as object),
+      allowedExtensions: parseListEnv(env.GEMINI_MCP_FS_ALLOWED_EXTENSIONS),
+    };
+  if (env.GEMINI_MCP_FS_DENY_PATTERNS)
+    merged.filesystem = {
+      ...(merged.filesystem as object),
+      denyPatterns: parseListEnv(env.GEMINI_MCP_FS_DENY_PATTERNS),
     };
 
   const parsed = configSchema.parse(merged);

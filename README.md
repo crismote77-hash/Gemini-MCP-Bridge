@@ -25,6 +25,8 @@ npm run setup
 ## Features
 
 - Text generation, image analysis, embeddings, model listing, token counting
+- Optional repo-scoped filesystem access via MCP roots for server-side code review/fix
+- Compound tools: `gemini_code_review` (review) and `gemini_code_fix` (diff-based fixes)
 - OAuth/ADC (subscription) auth with API key fallback in `auto` mode (warns on modality change)
 - Discoverability resources and built-in help
 - Rate limits and daily token budgets (optional shared Redis store)

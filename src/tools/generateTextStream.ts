@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ServerNotification } from "@modelcontextprotocol/sdk/types.js";
 import type { BridgeConfig } from "../config.js";
 import type { Logger } from "../logger.js";
 import type {
@@ -53,7 +54,35 @@ function contentChars(contents: ContentMessage[]): number {
   }, 0);
 }
 
-export function registerGenerateTextTool(
+type ToolExtra = {
+  signal: AbortSignal;
+  _meta?: { progressToken?: string | number };
+  sendNotification: (notification: ServerNotification) => Promise<void>;
+};
+
+async function sendProgress(
+  extra: ToolExtra | undefined,
+  progress: number,
+  message?: string,
+): Promise<void> {
+  const progressToken = extra?._meta?.progressToken;
+  if (!progressToken) return;
+  await extra.sendNotification({
+    method: "notifications/progress",
+    params: {
+      progressToken,
+      progress,
+      ...(message ? { message } : {}),
+    },
+  });
+}
+
+function truncate(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars)}…`;
+}
+
+export function registerGenerateTextStreamTool(
   server: McpServer,
   deps: Dependencies,
 ): void {
@@ -61,10 +90,10 @@ export function registerGenerateTextTool(
   const maxInputChars = deps.config.limits.maxInputChars;
   const defaultMaxOutputTokens = deps.config.generation.maxOutputTokens;
   server.registerTool(
-    "gemini_generate_text",
+    "gemini_generate_text_stream",
     {
-      title: "Gemini Generate Text",
-      description: `Generate text with Gemini models. Limits: maxTokens <= ${maxTokensLimit}, total input <= ${maxInputChars} chars.`,
+      title: "Gemini Generate Text (Streaming)",
+      description: `Generate text with Gemini models and emit incremental progress notifications when requested by the client. Limits: maxTokens <= ${maxTokensLimit}, total input <= ${maxInputChars} chars.`,
       inputSchema: {
         prompt: z
           .string()
@@ -113,47 +142,50 @@ export function registerGenerateTextTool(
         safetySettings: z.array(safetySettingSchema).optional(),
       },
     },
-    createGenerateTextHandler(deps),
+    createGenerateTextStreamHandler(deps),
   );
 }
 
-export function createGenerateTextHandler(
+export function createGenerateTextStreamHandler(
   deps: Dependencies,
-  toolName = "gemini_generate_text",
+  toolName = "gemini_generate_text_stream",
 ) {
   const toolDeps: ToolDependencies = deps;
 
-  return async ({
-    prompt,
-    model,
-    temperature,
-    maxTokens,
-    topK,
-    topP,
-    systemInstruction,
-    jsonMode,
-    strictJson,
-    jsonSchema,
-    grounding,
-    includeGroundingMetadata,
-    conversationId,
-    safetySettings,
-  }: {
-    prompt: string;
-    model?: string;
-    temperature?: number;
-    maxTokens?: number;
-    topK?: number;
-    topP?: number;
-    systemInstruction?: string;
-    jsonMode?: boolean;
-    strictJson?: boolean;
-    jsonSchema?: Record<string, unknown>;
-    grounding?: boolean;
-    includeGroundingMetadata?: boolean;
-    conversationId?: string;
-    safetySettings?: Array<{ category: string; threshold: string }>;
-  }) => {
+  return async (
+    {
+      prompt,
+      model,
+      temperature,
+      maxTokens,
+      topK,
+      topP,
+      systemInstruction,
+      jsonMode,
+      strictJson,
+      jsonSchema,
+      grounding,
+      includeGroundingMetadata,
+      conversationId,
+      safetySettings,
+    }: {
+      prompt: string;
+      model?: string;
+      temperature?: number;
+      maxTokens?: number;
+      topK?: number;
+      topP?: number;
+      systemInstruction?: string;
+      jsonMode?: boolean;
+      strictJson?: boolean;
+      jsonSchema?: Record<string, unknown>;
+      grounding?: boolean;
+      includeGroundingMetadata?: boolean;
+      conversationId?: string;
+      safetySettings?: Array<{ category: string; threshold: string }>;
+    },
+    extra: ToolExtra,
+  ) => {
     return withToolErrorHandling(toolName, toolDeps, async () => {
       const wantsJson = Boolean(jsonMode || strictJson || jsonSchema);
       const outputLimit = maxTokens ?? deps.config.generation.maxOutputTokens;
@@ -221,18 +253,42 @@ export function createGenerateTextHandler(
             ...(grounding ? { tools: [{ google_search: {} }] } : {}),
           };
 
-          const response = await client.generateContent<unknown>(
+          await sendProgress(extra, 0, "Starting streaming request…");
+
+          let fullText = "";
+          let lastChunk: unknown = undefined;
+          let chunkIndex = 0;
+
+          for await (const chunk of client.streamGenerateContent<unknown>(
             model ?? deps.config.model,
             requestBody,
-          );
-          const text = extractText(response);
-          const finishReason = extractFirstCandidateFinishReason(response);
-          const blockReason = extractPromptBlockReason(response);
-          const usage = extractUsage(response);
+            { signal: extra.signal },
+          )) {
+            lastChunk = chunk;
+            chunkIndex += 1;
+            const chunkText = extractText(chunk);
+            if (!chunkText) continue;
+            const delta = chunkText.startsWith(fullText)
+              ? chunkText.slice(fullText.length)
+              : chunkText;
+            if (!delta) continue;
+            fullText += delta;
+
+            // Keep progress messages reasonably small for MCP clients.
+            const msg = truncate(delta, 2000);
+            await sendProgress(extra, fullText.length, msg);
+
+            // Safety valve: avoid pathological infinite streams
+            if (chunkIndex > 10_000) break;
+          }
+
+          const finishReason = extractFirstCandidateFinishReason(lastChunk);
+          const blockReason = extractPromptBlockReason(lastChunk);
+          const usage = extractUsage(lastChunk);
           const requestTokens = usage.totalTokens || estimatedInputTokens;
 
           await deps.dailyBudget.commit(
-            "gemini_generate_text",
+            toolName,
             requestTokens,
             undefined,
             reservation,
@@ -240,10 +296,10 @@ export function createGenerateTextHandler(
 
           if (convoId) {
             deps.conversationStore.append(convoId, userMessage);
-            if (text) {
+            if (fullText) {
               deps.conversationStore.append(convoId, {
                 role: "model",
-                parts: [{ text }],
+                parts: [{ text: fullText }],
               });
             }
           }
@@ -252,12 +308,13 @@ export function createGenerateTextHandler(
           const usageFooter = formatUsageFooter(requestTokens, usageSummary);
           const warnings = takeAuthFallbackWarnings(client);
           const groundingMetadata = includeGroundingMetadata
-            ? extractGroundingMetadata(response)
+            ? extractGroundingMetadata(lastChunk)
             : undefined;
           const groundingBlock = groundingMetadata
             ? textBlock(JSON.stringify({ groundingMetadata }, null, 2))
             : undefined;
-          if (!text.trim()) {
+
+          if (!fullText.trim()) {
             const diagnostics = [
               finishReason ? `finishReason=${finishReason}` : undefined,
               blockReason ? `blockReason=${blockReason}` : undefined,
@@ -265,8 +322,8 @@ export function createGenerateTextHandler(
               .filter(Boolean)
               .join(", ");
             const debug =
-              deps.config.logging.debug && response
-                ? `\n\nRaw response:\n${JSON.stringify(response, null, 2)}`
+              deps.config.logging.debug && lastChunk
+                ? `\n\nRaw response:\n${JSON.stringify(lastChunk, null, 2)}`
                 : "";
             return {
               isError: true,
@@ -279,8 +336,9 @@ export function createGenerateTextHandler(
               ],
             };
           }
+
           if (wantsJson && strictJson) {
-            const parsed = parseJsonFromText(text);
+            const parsed = parseJsonFromText(fullText);
             if (!parsed.ok) {
               return {
                 isError: true,
@@ -294,19 +352,21 @@ export function createGenerateTextHandler(
               };
             }
           }
+
           if (wantsJson) {
             return {
               content: [
-                textBlock(text),
+                textBlock(fullText),
                 ...(groundingBlock ? [groundingBlock] : []),
                 textBlock(usageFooter),
                 ...warnings,
               ],
             };
           }
+
           return {
             content: [
-              textBlock(`${text}\n\n${usageFooter}`),
+              textBlock(`${fullText}\n\n${usageFooter}`),
               ...(groundingBlock ? [groundingBlock] : []),
               ...warnings,
             ],

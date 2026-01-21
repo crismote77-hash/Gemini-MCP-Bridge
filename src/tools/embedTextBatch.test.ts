@@ -4,16 +4,15 @@ import type { BridgeConfig } from "../config.js";
 import type { Logger } from "../logger.js";
 import type { GeminiClient } from "../services/geminiClient.js";
 import * as toolHelpers from "../utils/toolHelpers.js";
-import { createEmbedTextHandler } from "./embedText.js";
+import { createEmbedTextBatchHandler } from "./embedTextBatch.js";
 
-describe("gemini_embed_text", () => {
+describe("gemini_embed_text_batch", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  function createDeps(backend: "developer" | "vertex") {
+  function createDeps() {
     const config = {
-      backend,
       limits: { maxInputChars: 10_000 },
     } as unknown as BridgeConfig;
 
@@ -32,9 +31,11 @@ describe("gemini_embed_text", () => {
     };
   }
 
-  it("uses embedContent on the Developer backend", async () => {
-    const deps = createDeps("developer");
-    const embedContent = vi.fn().mockResolvedValue({ ok: true });
+  it("uses embedContent on the Developer backend and extracts vectors", async () => {
+    const deps = createDeps();
+    const embedContent = vi.fn().mockResolvedValue({
+      embedding: { values: [1, 2, 3] },
+    });
     const predict = vi.fn().mockResolvedValue({ ok: true });
     const client = {
       backend: "developer",
@@ -47,22 +48,27 @@ describe("gemini_embed_text", () => {
       client as unknown as GeminiClient,
     );
 
-    const handler = createEmbedTextHandler(
-      deps as unknown as Parameters<typeof createEmbedTextHandler>[0],
+    const handler = createEmbedTextBatchHandler(
+      deps as unknown as Parameters<typeof createEmbedTextBatchHandler>[0],
     );
-    const result = await handler({ text: "Hello world" });
+    const result = await handler({ texts: ["Hello world"] });
 
-    expect(result).toHaveProperty("content");
-    expect(embedContent).toHaveBeenCalledWith("text-embedding-004", {
-      content: { parts: [{ text: "Hello world" }] },
-    });
+    expect(embedContent).toHaveBeenCalledTimes(1);
     expect(predict).not.toHaveBeenCalled();
+    const structured = (result as unknown as { structuredContent: unknown })
+      .structuredContent as {
+      results: Array<{ ok: boolean; vector?: number[] }>;
+    };
+    expect(structured.results[0]?.ok).toBe(true);
+    expect(structured.results[0]?.vector).toEqual([1, 2, 3]);
   });
 
   it("uses predict on the Vertex backend", async () => {
-    const deps = createDeps("vertex");
+    const deps = createDeps();
     const embedContent = vi.fn().mockResolvedValue({ ok: true });
-    const predict = vi.fn().mockResolvedValue({ ok: true });
+    const predict = vi.fn().mockResolvedValue({
+      predictions: [{ embeddings: { values: [4, 5] } }],
+    });
     const client = {
       backend: "vertex",
       embedContent,
@@ -74,15 +80,18 @@ describe("gemini_embed_text", () => {
       client as unknown as GeminiClient,
     );
 
-    const handler = createEmbedTextHandler(
-      deps as unknown as Parameters<typeof createEmbedTextHandler>[0],
+    const handler = createEmbedTextBatchHandler(
+      deps as unknown as Parameters<typeof createEmbedTextBatchHandler>[0],
     );
-    const result = await handler({ text: "Hello world" });
+    const result = await handler({ texts: ["Hello world"] });
 
-    expect(result).toHaveProperty("content");
-    expect(predict).toHaveBeenCalledWith("text-embedding-004", {
-      instances: [{ content: "Hello world" }],
-    });
+    expect(predict).toHaveBeenCalledTimes(1);
     expect(embedContent).not.toHaveBeenCalled();
+    const structured = (result as unknown as { structuredContent: unknown })
+      .structuredContent as {
+      results: Array<{ ok: boolean; vector?: number[] }>;
+    };
+    expect(structured.results[0]?.ok).toBe(true);
+    expect(structured.results[0]?.vector).toEqual([4, 5]);
   });
 });

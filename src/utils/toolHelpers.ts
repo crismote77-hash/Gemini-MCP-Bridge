@@ -11,6 +11,7 @@ import { resolvePrimaryApiBaseUrl } from "./apiBaseUrls.js";
 import { formatToolError } from "./toolErrors.js";
 import { textBlock } from "./textBlock.js";
 import { redactString } from "./redact.js";
+import { isRecord } from "./typeGuards.js";
 
 /**
  * Base tool dependencies required by most tools.
@@ -84,10 +85,47 @@ export function validateMaxTokens(
   if (maxTokens > limit) {
     return {
       isError: true,
-      content: [textBlock(`maxTokens exceeds configured limit (${limit}).`)],
+      content: [
+        textBlock(
+          `maxTokens exceeds configured limit (${limit}). Lower maxTokens, or raise the cap via GEMINI_MCP_MAX_TOKENS (or ~/.gemini-mcp-bridge/config.json: limits.maxTokensPerRequest).`,
+        ),
+      ],
     };
   }
   return null;
+}
+
+function looksLikeJsonSchema(value: Record<string, unknown>): boolean {
+  const keys = Object.keys(value);
+  return (
+    keys.includes("$schema") ||
+    keys.includes("$ref") ||
+    keys.includes("type") ||
+    keys.includes("properties") ||
+    keys.includes("items") ||
+    keys.includes("anyOf") ||
+    keys.includes("oneOf") ||
+    keys.includes("allOf") ||
+    keys.includes("enum") ||
+    keys.includes("const") ||
+    keys.includes("required") ||
+    keys.includes("additionalProperties")
+  );
+}
+
+/**
+ * Accepts either a raw JSON Schema object, or a wrapper like:
+ *   { name, schema: { ... }, strict }
+ * and returns the schema object to send to Gemini (best-effort).
+ */
+export function normalizeResponseJsonSchema(
+  jsonSchema: Record<string, unknown>,
+): Record<string, unknown> {
+  const schema = jsonSchema.schema;
+  if (isRecord(schema) && !looksLikeJsonSchema(jsonSchema)) {
+    return schema;
+  }
+  return jsonSchema;
 }
 
 /**

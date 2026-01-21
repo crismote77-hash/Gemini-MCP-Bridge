@@ -1,5 +1,9 @@
 # Runbook (Rotating)
 
+## Runbook Index
+- (none yet)
+
+
 Start using `npm run runbook:note -- "..."` to append entries.
 
 ---
@@ -75,4 +79,35 @@ Start using `npm run runbook:note -- "..."` to append entries.
 ## 2026-01-19T21:19:29Z
 
 - Added daily Gemini API radar (GitHub Actions) to diff /v1beta/models and open an issue; verified: npm run build, npm test; next: add GEMINI_API_KEY secret in GitHub and verify scheduled run
+
+## 2026-01-19T22:17:48Z
+
+- Added streaming/json/batch/moderation/conversation tools + llm_* aliases + model capability resources; verified: npm run build, npm test, npm run lint; next: re-test tools in Claude/Codex
+
+## 2026-01-19T22:25:17Z
+
+- Configured Codex + Claude Desktop to run gemini server from /home/crismote/geminiMCPbridge/dist/index.js; next: restart Codex + Claude Desktop to pick up changes
+## 2026-01-21T07:45:44Z
+
+- Fix jsonSchema/strictJson to imply JSON mode + unwrap schema wrappers; add tests/docs; verified: npm run build, npm test, npm run lint; next: restart bridge
+
+## 2026-01-21T08:00:04Z
+
+- Raise default maxTokensPerRequest to 8192 + improve maxTokens limit error message; verified: npm run build, npm test, npm run lint; next: restart bridge
+
+## 2026-01-21T08:09:53Z
+
+- Advertise maxTokens caps + prompt hints in MCP tool schemas and gemini://capabilities; verified: npm run build, npm test, npm run lint; next: restart bridge and re-test client behavior
+
+## 2026-01-21T09:23:46Z
+
+- Add repo-roots filesystem mode + gemini_code_review/gemini_code_fix (diff approval + optional auto-apply); verified: npm run build, npm test, npm run lint; next: restart bridge and try tools in Claude Desktop + Codex CLI
+
+## 2026-01-21T09:33:12Z
+
+- Audit docs/codebase for inconsistencies; update README/User Manual/Technical docs and capabilities notes for filesystem tools; verified: npm run build, npm test, npm run lint; next: restart bridge and re-test in clients
+
+## 2026-01-21T10:23:15Z
+
+- Sync AGENTS/CLAUDE + USER_MANUAL/TECHNICAL for install options and capability/limit discoverability; verified: doc-only (no tests); next: commit + push
 

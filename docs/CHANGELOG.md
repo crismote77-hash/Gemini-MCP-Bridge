@@ -31,11 +31,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Type guard `isRateLimitEvalResult()` for Redis eval response validation
 - Base64 validation (`isValidBase64`, `decodeBase64Safely`) for image uploads
 - `connectTimeoutMs` optional config parameter for Redis connections
+- Streaming generation support via Gemini `:streamGenerateContent` (SSE/streamed JSON parsing in the Gemini client).
+- New tools: `gemini_generate_text_stream`, `gemini_generate_json`, `gemini_embed_text_batch`, `gemini_count_tokens_batch`, `gemini_moderate_text`.
+- Conversation management tools: `gemini_conversation_create`, `gemini_conversation_list`, `gemini_conversation_export`, `gemini_conversation_reset`.
+- Provider-agnostic alias tools prefixed with `llm_` (e.g. `llm_generate_text`, `llm_generate_json`, `llm_embed_text_batch`).
+- New resources: `conversation://list`, `conversation://history/{id}`, `gemini://model-capabilities`, `gemini://model/{name}`, `llm://model-capabilities`.
+- New opt-in filesystem support (repo-scoped via MCP roots; optional machine-wide “system” mode) and compound tools:
+  - `gemini_code_review`: server-side repo code review without the caller sending file contents.
+  - `gemini_code_fix`: returns `{ summary, diff }` and can optionally auto-apply when `filesystem.allowWrite=true`.
 
 ### Changed
 
 - Setup wizard output now includes guided explanations, numbered menus, masked detected values, git-path warnings, optional multi-user MCP client configuration, and ANSI color cues (disable with `NO_COLOR=1`).
 - MCP server now reports its name as `gemini-bridge` in discovery/handshake output.
+- Default `limits.maxTokensPerRequest` increased to 8192 (override with `GEMINI_MCP_MAX_TOKENS` / config file).
+- Tool input schemas now advertise maxTokens caps and prompt-structure hints (helps MCP clients/LLMs avoid invalid requests).
+- `gemini://capabilities` now advertises filesystem mode and the new compound review/fix tools when enabled.
 - Redis connection now uses 10-second timeout with `Promise.race()` and re-throws errors instead of silently failing
 - HTTP server transport cleanup uses `Promise.allSettled()` for robust iteration
 - Rate limiter uses `filter()` instead of repeated `shift()` for efficiency, with hard cap on array size
@@ -46,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Standardized error variable naming: all catch blocks use `error` instead of `err`
 - Refactored `countTokens` and `listModels` tools to use shared helper utilities
 - `gemini_list_models` supports curated filtering and falls back to curated metadata on API failure
+- `gemini_generate_text` supports `strictJson` (optional JSON validation) and `includeGroundingMetadata` (best-effort grounding metadata extraction).
 
 ### Fixed
 
@@ -53,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Gemini client now surfaces clearer errors when the API returns non-JSON responses (instead of JSON parse exceptions).
 - `gemini_generate_text` and `gemini_analyze_image` now return a clear error (with `blockReason` / `finishReason`) when the API returns no text, instead of returning an empty string.
 - Tool errors now surface safe underlying error messages (redacted) for easier debugging (e.g. image URL fetch failures).
+- `jsonSchema` now implies JSON mode for `gemini_generate_text` / `gemini_generate_text_stream`, and schema wrapper objects are unwrapped for structured output requests.
 - `gemini_list_models` now retries alternate Vertex endpoints when the API returns a 404 HTML response (reduces fallback-to-curated warnings on some setups).
 - Redis connection hangs indefinitely if server is unavailable (now times out after 10s)
 - HTTP server shows cryptic errors for port conflicts (now shows user-friendly messages for EADDRINUSE, EACCES, EADDRNOTAVAIL)

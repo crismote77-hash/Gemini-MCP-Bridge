@@ -55,9 +55,24 @@ export function formatToolError(error: unknown): ToolErrorInfo {
 
   if (error instanceof GeminiApiError) {
     const status = error.status;
+    const rawMessage = redactString((error.message || "").trim());
+    const normalized = rawMessage.toLowerCase();
+
+    const looksLikeSchemaBug =
+      normalized.includes("properties") &&
+      (normalized.includes("cannot read properties of undefined") ||
+        (normalized.includes("cannot read property") &&
+          normalized.includes("of undefined")) ||
+        normalized.includes("undefined (reading 'properties')") ||
+        normalized.includes('undefined (reading "properties")'));
+    if (looksLikeSchemaBug) {
+      return {
+        message:
+          "Gemini API failed while applying your jsonSchema for structured output. Try omitting jsonSchema, or use a simple JSON Schema object (type: object + properties/required). Also ensure the chosen model supports JSON mode (gemini_list_models filter=json_mode).",
+      };
+    }
+
     if (status === 401 || status === 403) {
-      const rawMessage = redactString((error.message || "").trim());
-      const normalized = rawMessage.toLowerCase();
       if (normalized.includes("missing gemini authentication")) {
         return {
           message:
@@ -89,14 +104,12 @@ export function formatToolError(error: unknown): ToolErrorInfo {
       };
     }
     if (status === 402) {
-      const rawMessage = redactString((error.message || "").trim());
       const detail = rawMessage ? ` (${rawMessage})` : "";
       return {
         message: `Gemini API billing/credits issue${detail}.\n\n${formatApiKeySetupGuidance()}`,
       };
     }
     if (status === 429) {
-      const rawMessage = redactString((error.message || "").trim());
       const detail = rawMessage ? ` (${rawMessage})` : "";
       return {
         message: `Gemini API quota/rate limit exceeded${detail}.\n\n${formatApiKeySetupGuidance()}`,
@@ -105,7 +118,7 @@ export function formatToolError(error: unknown): ToolErrorInfo {
     if (status >= 500) {
       return { message: `Gemini API error (${status}). Try again later.` };
     }
-    return { message: error.message || `Gemini API error (${status}).` };
+    return { message: rawMessage || `Gemini API error (${status}).` };
   }
 
   if (error instanceof Error) {

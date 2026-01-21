@@ -140,4 +140,52 @@ describe("ConversationStore", () => {
       expect(contents2[0].parts[0].text).toBe("Hello conv2");
     });
   });
+
+  describe("conversation management helpers", () => {
+    it("create() is idempotent for a provided id and sets current", () => {
+      const store = new ConversationStore({
+        maxTurns: 10,
+        maxTotalChars: 10000,
+        nowMs: mockNowMs,
+      });
+
+      const created = store.create("convA");
+      expect(created.id).toBe("convA");
+      expect(store.getCurrentId()).toBe("convA");
+
+      store.append("convA", { role: "user", parts: [{ text: "Hello" }] });
+      const again = store.create("convA");
+      expect(again.contents.length).toBe(1);
+      expect(store.getCurrentId()).toBe("convA");
+    });
+
+    it("listSummaries() returns most-recent-first", () => {
+      const store = new ConversationStore({
+        maxTurns: 10,
+        maxTotalChars: 10000,
+        nowMs: mockNowMs,
+      });
+
+      store.create("conv1");
+      currentTime += 1000;
+      store.create("conv2");
+
+      const summaries = store.listSummaries(10);
+      expect(summaries[0]?.id).toBe("conv2");
+      expect(summaries[1]?.id).toBe("conv1");
+    });
+
+    it("setCurrent() returns null for unknown ids", () => {
+      const store = new ConversationStore({
+        maxTurns: 10,
+        maxTotalChars: 10000,
+        nowMs: mockNowMs,
+      });
+
+      store.create("conv1");
+      const missing = store.setCurrent("does-not-exist");
+      expect(missing).toBeNull();
+      expect(store.getCurrentId()).toBe("conv1");
+    });
+  });
 });
