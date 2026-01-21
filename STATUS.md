@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated (UTC): 2026-01-21T20:51:52Z
+Last updated (UTC): 2026-01-21T21:14:30Z
 
 ## In Progress
 
@@ -65,10 +65,10 @@ Last updated (UTC): 2026-01-21T20:51:52Z
 - Investigate tool-smoke connection closed with trace/capture; connect fails with connection closed, server exits code 0, spawn args correct, no stderr output.
 - Document tool-smoke env overrides and trace/capture in TECHNICAL.md.
 - Investigate stdio connect failures: stdin ends immediately after resume (trace shows readableEnded true); disabling stdin shutdown yields request timeouts. Likely stdin EOF in non-interactive env.
+- Add HTTP transport/fallback to tool-smoke with new transport/env options; document in TECHNICAL/CHANGELOG.
 
 ## Verification Snapshot
 
-Last verified (UTC): 2026-01-21T20:51:52Z
+Last verified (UTC): 2026-01-21T21:14:30Z
 
-- npm run build
-- node --input-type=module -e "Client + StdioClientTransport connect test" (failed: stdin_end -> request timeout)
+- GEMINI_MCP_AUTH_FALLBACK=auto TOOL_SMOKE_TRANSPORT=auto TOOL_SMOKE_TRACE=1 node scripts/tool-smoke.mjs (failed: stdio connection closed; HTTP listen EPERM on 127.0.0.1)

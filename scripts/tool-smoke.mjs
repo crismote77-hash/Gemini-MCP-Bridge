@@ -1,6 +1,10 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { ListRootsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { spawn } from "node:child_process";
+import { createConnection, createServer } from "node:net";
+import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 
 const PNG_2X2_BASE64 =
@@ -18,6 +22,19 @@ const IMAGE_URL =
   process.env.TOOL_SMOKE_IMAGE_URL ??
   (IMAGE_BASE64 ? undefined : DEFAULT_IMAGE_URL);
 const IMAGE_MIME = process.env.TOOL_SMOKE_IMAGE_MIME ?? "image/png";
+const TRANSPORT_MODE_RAW = (
+  process.env.TOOL_SMOKE_TRANSPORT ?? "auto"
+).toLowerCase();
+const TRANSPORT_MODE =
+  TRANSPORT_MODE_RAW === "stdio" ||
+  TRANSPORT_MODE_RAW === "http" ||
+  TRANSPORT_MODE_RAW === "auto"
+    ? TRANSPORT_MODE_RAW
+    : "auto";
+const HTTP_HOST = process.env.TOOL_SMOKE_HTTP_HOST ?? "127.0.0.1";
+const HTTP_PORT_RAW = process.env.TOOL_SMOKE_HTTP_PORT;
+const HTTP_READY_TIMEOUT_MS = 5_000;
+const HTTP_READY_INTERVAL_MS = 100;
 
 function truncate(text, limit = MAX_PREVIEW_CHARS) {
   if (!text) return "";
@@ -66,6 +83,249 @@ function trace(message) {
   process.stderr.write(`[tool-smoke] ${message}\n`);
 }
 
+function parsePort(value) {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 65535) return null;
+  return parsed;
+}
+
+async function findAvailablePort(host) {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.unref();
+    server.on("error", reject);
+    server.listen(0, host, () => {
+      const address = server.address();
+      const port =
+        typeof address === "object" && address ? address.port : null;
+      server.close(() => {
+        if (typeof port === "number") {
+          resolve(port);
+          return;
+        }
+        reject(new Error("Unable to determine available port"));
+      });
+    });
+  });
+}
+
+async function resolveHttpPort() {
+  const parsed = parsePort(HTTP_PORT_RAW);
+  if (parsed) return parsed;
+  return findAvailablePort(HTTP_HOST);
+}
+
+async function waitForPort(host, port) {
+  const start = Date.now();
+  while (Date.now() - start < HTTP_READY_TIMEOUT_MS) {
+    const ready = await new Promise((resolve) => {
+      const socket = createConnection({ host, port });
+      const onDone = (ok) => {
+        socket.removeAllListeners();
+        socket.destroy();
+        resolve(ok);
+      };
+      socket.setTimeout(1_000, () => onDone(false));
+      socket.once("connect", () => onDone(true));
+      socket.once("error", () => onDone(false));
+    });
+    if (ready) return;
+    await delay(HTTP_READY_INTERVAL_MS);
+  }
+  throw new Error(`Timed out waiting for HTTP server on ${host}:${port}`);
+}
+
+function buildServerEnv() {
+  return {
+    ...process.env,
+    GEMINI_MCP_DEBUG: DEBUG_ENABLED ? "1" : process.env.GEMINI_MCP_DEBUG,
+    GEMINI_MCP_FS_MODE: process.env.GEMINI_MCP_FS_MODE ?? "repo",
+  };
+}
+
+function captureStderr(stream, stderrLines) {
+  if (!stream) return;
+  let stderrBuffer = "";
+  stream.on("data", (chunk) => {
+    const text = chunk.toString("utf8");
+    process.stderr.write(text);
+    stderrBuffer += text;
+    const lines = stderrBuffer.split("\n");
+    stderrBuffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line) continue;
+      stderrLines.push(line);
+      if (stderrLines.length > MAX_STDERR_LINES) stderrLines.shift();
+    }
+  });
+}
+
+function createClient() {
+  const client = new Client({ name: "tool-smoke", version: "0.1.0" });
+  client.registerCapabilities({ roots: {} });
+  client.setRequestHandler(ListRootsRequestSchema, async () => ({
+    roots: [
+      {
+        uri: pathToFileURL(process.cwd()).toString(),
+        name: "workspace",
+      },
+    ],
+  }));
+  return client;
+}
+
+async function stopProcess(proc) {
+  if (!proc || proc.exitCode !== null) return;
+  try {
+    proc.kill("SIGTERM");
+  } catch {
+    return;
+  }
+  await Promise.race([
+    new Promise((resolve) => proc.once("exit", resolve)),
+    delay(2_000),
+  ]);
+  if (proc.exitCode !== null) return;
+  try {
+    proc.kill("SIGKILL");
+  } catch {
+    return;
+  }
+  await Promise.race([
+    new Promise((resolve) => proc.once("exit", resolve)),
+    delay(2_000),
+  ]);
+}
+
+function finalizeAttempt(attempt, context) {
+  context.finalize();
+  if (attempt.debug && Object.keys(attempt.debug).length === 0) {
+    delete attempt.debug;
+  }
+}
+
+function createStdioContext() {
+  const transport = new StdioClientTransport({
+    command: "node",
+    args: ["dist/index.js", "--stdio"],
+    cwd: process.cwd(),
+    env: buildServerEnv(),
+    stderr: CAPTURE_STDERR ? "pipe" : "inherit",
+  });
+  const debug = {};
+  const stderrLines = [];
+  if (CAPTURE_STDERR && transport.stderr) {
+    captureStderr(transport.stderr, stderrLines);
+  }
+  const closeEvents = [];
+  const transportErrors = [];
+  const exitEvents = [];
+  if (TRACE_ENABLED) {
+    const originalStart = transport.start.bind(transport);
+    transport.start = async () => {
+      await originalStart();
+      const proc = transport._process;
+      if (!proc) return;
+      if (proc.spawnargs) debug.spawnArgs = proc.spawnargs;
+      proc.on("exit", (code, signal) => {
+        exitEvents.push({
+          code,
+          signal,
+          timestamp: new Date().toISOString(),
+        });
+      });
+    };
+  }
+  transport.onclose = () => {
+    closeEvents.push({ timestamp: new Date().toISOString() });
+    trace("stdio transport closed");
+  };
+  transport.onerror = (error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    transportErrors.push({ message, timestamp: new Date().toISOString() });
+    trace(`stdio transport error: ${message}`);
+  };
+
+  return {
+    kind: "stdio",
+    transport,
+    debug,
+    finalize: () => {
+      if (CAPTURE_STDERR) debug.serverStderrTail = stderrLines;
+      if (closeEvents.length > 0) debug.closeEvents = closeEvents;
+      if (transportErrors.length > 0)
+        debug.transportErrors = transportErrors;
+      if (exitEvents.length > 0) debug.exitEvents = exitEvents;
+    },
+  };
+}
+
+async function createHttpContext() {
+  const host = HTTP_HOST;
+  const port = await resolveHttpPort();
+  const url = `http://${host}:${port}/mcp`;
+  const child = spawn(
+    "node",
+    ["dist/index.js", "--http", "--http-host", host, "--http-port", `${port}`],
+    {
+      cwd: process.cwd(),
+      env: buildServerEnv(),
+      stdio: ["ignore", "ignore", CAPTURE_STDERR ? "pipe" : "inherit"],
+    },
+  );
+  const debug = {};
+  if (TRACE_ENABLED && child.spawnargs) {
+    debug.spawnArgs = child.spawnargs;
+  }
+  const stderrLines = [];
+  if (CAPTURE_STDERR && child.stderr) {
+    captureStderr(child.stderr, stderrLines);
+  }
+  const closeEvents = [];
+  const transportErrors = [];
+  const exitEvents = [];
+  const processErrors = [];
+  child.on("exit", (code, signal) => {
+    exitEvents.push({ code, signal, timestamp: new Date().toISOString() });
+  });
+  child.on("error", (error) => {
+    processErrors.push({
+      message: error instanceof Error ? error.message : String(error),
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  const transport = new StreamableHTTPClientTransport(url);
+  transport.onclose = () => {
+    closeEvents.push({ timestamp: new Date().toISOString() });
+    trace("http transport closed");
+  };
+  transport.onerror = (error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    transportErrors.push({ message, timestamp: new Date().toISOString() });
+    trace(`http transport error: ${message}`);
+  };
+
+  return {
+    kind: "http",
+    transport,
+    debug,
+    info: { host, port, url },
+    close: async () => {
+      await stopProcess(child);
+    },
+    finalize: () => {
+      if (CAPTURE_STDERR) debug.serverStderrTail = stderrLines;
+      if (closeEvents.length > 0) debug.closeEvents = closeEvents;
+      if (transportErrors.length > 0)
+        debug.transportErrors = transportErrors;
+      if (exitEvents.length > 0) debug.exitEvents = exitEvents;
+      if (processErrors.length > 0) debug.processErrors = processErrors;
+    },
+  };
+}
+
 async function runStep(name, fn) {
   const start = Date.now();
   try {
@@ -79,6 +339,59 @@ async function runStep(name, fn) {
       error: truncate(message, 400),
     };
   }
+}
+
+async function safeClose(client, context) {
+  try {
+    await client.close();
+  } catch {
+    // ignore
+  }
+  if (context?.close) {
+    try {
+      await context.close();
+    } catch {
+      // ignore
+    }
+  }
+}
+
+async function attemptTransport(kind) {
+  let context;
+  try {
+    context = kind === "http" ? await createHttpContext() : createStdioContext();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      attempt: {
+        kind,
+        connect: {
+          ok: false,
+          durationMs: 0,
+          error: truncate(message, 400),
+        },
+      },
+    };
+  }
+  const client = createClient();
+  const attempt = { kind, debug: context.debug };
+  if (context.info) attempt.http = context.info;
+  trace(`${kind} connect start`);
+  const connectStep = await runStep("connect", async () => {
+    if (kind === "http" && context.info) {
+      await waitForPort(context.info.host, context.info.port);
+    }
+    await client.connect(context.transport);
+  });
+  attempt.connect = connectStep;
+  if (!connectStep.ok) {
+    await safeClose(client, context);
+    finalizeAttempt(attempt, context);
+    return { ok: false, attempt };
+  }
+  trace(`${kind} connect ok`);
+  return { ok: true, client, context, attempt };
 }
 
 async function runTool(client, name, args, opts = {}) {
@@ -128,86 +441,9 @@ async function runToolWithRetry(client, test) {
 }
 
 async function main() {
-  const client = new Client({ name: "tool-smoke", version: "0.1.0" });
-  client.registerCapabilities({ roots: {} });
-  const transport = new StdioClientTransport({
-    command: "node",
-    args: ["dist/index.js", "--stdio"],
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      GEMINI_MCP_DEBUG: DEBUG_ENABLED ? "1" : process.env.GEMINI_MCP_DEBUG,
-      GEMINI_MCP_FS_MODE: process.env.GEMINI_MCP_FS_MODE ?? "repo",
-    },
-    stderr: CAPTURE_STDERR ? "pipe" : "inherit",
-  });
-  const debugReport = {};
-  const stderrLines = [];
-  let stderrBuffer = "";
-  if (CAPTURE_STDERR && transport.stderr) {
-    transport.stderr.on("data", (chunk) => {
-      const text = chunk.toString("utf8");
-      process.stderr.write(text);
-      stderrBuffer += text;
-      const lines = stderrBuffer.split("\n");
-      stderrBuffer = lines.pop() ?? "";
-      for (const line of lines) {
-        if (!line) continue;
-        stderrLines.push(line);
-        if (stderrLines.length > MAX_STDERR_LINES) stderrLines.shift();
-      }
-    });
-  }
-  const closeEvents = [];
-  const transportErrors = [];
-  const exitEvents = [];
-  if (TRACE_ENABLED) {
-    const originalStart = transport.start.bind(transport);
-    transport.start = async () => {
-      await originalStart();
-      const proc = transport._process;
-      if (!proc) return;
-      if (proc.spawnargs) debugReport.spawnArgs = proc.spawnargs;
-      proc.on("exit", (code, signal) => {
-        exitEvents.push({
-          code,
-          signal,
-          timestamp: new Date().toISOString(),
-        });
-      });
-    };
-  }
-  transport.onclose = () => {
-    closeEvents.push({ timestamp: new Date().toISOString() });
-    trace("transport closed");
-  };
-  transport.onerror = (error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    transportErrors.push({ message, timestamp: new Date().toISOString() });
-    trace(`transport error: ${message}`);
-  };
-  if (CAPTURE_STDERR) {
-    debugReport.serverStderrTail = stderrLines;
-  }
-
-  const finalizeDebugReport = () => {
-    if (closeEvents.length > 0) debugReport.closeEvents = closeEvents;
-    if (transportErrors.length > 0)
-      debugReport.transportErrors = transportErrors;
-    if (exitEvents.length > 0) debugReport.exitEvents = exitEvents;
-  };
-
-  client.setRequestHandler(ListRootsRequestSchema, async () => ({
-    roots: [
-      {
-        uri: pathToFileURL(process.cwd()).toString(),
-        name: "workspace",
-      },
-    ],
-  }));
-
   const report = {
     timestamp: new Date().toISOString(),
+    transport: { mode: TRANSPORT_MODE, attempts: [] },
     tools: {},
     resources: {},
     prompts: {},
@@ -217,26 +453,38 @@ async function main() {
   };
 
   let failureCount = 0;
+  const attemptOrder =
+    TRANSPORT_MODE === "auto" ? ["stdio", "http"] : [TRANSPORT_MODE];
+  let session = null;
+
+  for (const kind of attemptOrder) {
+    const result = await attemptTransport(kind);
+    report.transport.attempts.push(result.attempt);
+    if (result.ok) {
+      session = result;
+      report.transport.selected = kind;
+      report.connect = result.attempt.connect;
+      break;
+    }
+  }
+
+  if (!session) {
+    const lastAttempt =
+      report.transport.attempts[report.transport.attempts.length - 1];
+    if (lastAttempt?.connect) report.connect = lastAttempt.connect;
+    if (lastAttempt?.debug) report.debug = lastAttempt.debug;
+    report.summary = {
+      ok: false,
+      failures: 1,
+    };
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const { client, context, attempt } = session;
 
   try {
-    trace("connect start");
-    const connectStep = await runStep("connect", () =>
-      client.connect(transport),
-    );
-    report.connect = connectStep;
-    if (!connectStep.ok) {
-      finalizeDebugReport();
-      if (Object.keys(debugReport).length > 0) report.debug = debugReport;
-      report.summary = {
-        ok: false,
-        failures: 1,
-      };
-      process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-      process.exitCode = 1;
-      return;
-    }
-    trace("connect ok");
-
     const listToolsResult = await runStep("listTools", () =>
       client.listTools(),
     );
@@ -349,7 +597,7 @@ async function main() {
         name: "gemini_generate_json",
         args: {
           prompt:
-            "Return ONLY valid JSON that matches the schema. No markdown or extra text. Output: {\"ok\": true}.",
+            'Return ONLY valid JSON that matches the schema. No markdown or extra text. Output: {"ok": true}.',
           maxTokens: 128,
           temperature: 0,
           jsonSchema: {
@@ -361,7 +609,7 @@ async function main() {
         retryOnError: 1,
         retryArgs: {
           prompt:
-            "Return only minified JSON with no extra characters. Output exactly: {\"ok\":true}.",
+            'Return only minified JSON with no extra characters. Output exactly: {"ok":true}.',
           maxTokens: 256,
         },
       },
@@ -369,7 +617,7 @@ async function main() {
         id: "gemini_generate_json_plain",
         name: "gemini_generate_json",
         args: {
-          prompt: "Return JSON {\"ok\": true}.",
+          prompt: 'Return JSON {"ok": true}.',
           maxTokens: 64,
           temperature: 0,
         },
@@ -378,7 +626,7 @@ async function main() {
         name: "gemini_analyze_image",
         args: {
           prompt:
-            "Return one word describing the image. If unsure, return \"unknown\".",
+            'Return one word describing the image. If unsure, return "unknown".',
           maxTokens: 128,
           temperature: 0,
           ...imageInput,
@@ -432,7 +680,7 @@ async function main() {
         name: "llm_generate_json",
         args: {
           prompt:
-            "Return ONLY valid JSON that matches the schema. No markdown or extra text. Output: {\"ok\": true}.",
+            'Return ONLY valid JSON that matches the schema. No markdown or extra text. Output: {"ok": true}.',
           maxTokens: 128,
           temperature: 0,
           jsonSchema: {
@@ -444,7 +692,7 @@ async function main() {
         retryOnError: 1,
         retryArgs: {
           prompt:
-            "Return only minified JSON with no extra characters. Output exactly: {\"ok\":true}.",
+            'Return only minified JSON with no extra characters. Output exactly: {"ok":true}.',
           maxTokens: 256,
         },
       },
@@ -452,7 +700,7 @@ async function main() {
         name: "llm_analyze_image",
         args: {
           prompt:
-            "Return one word describing the image. If unsure, return \"unknown\".",
+            'Return one word describing the image. If unsure, return "unknown".',
           maxTokens: 128,
           temperature: 0,
           ...imageInput,
@@ -549,21 +797,33 @@ async function main() {
       if (!step.ok) failureCount += 1;
     }
   } finally {
-    await client.close();
+    try {
+      await client.close();
+    } catch {
+      // ignore
+    }
+    if (context.close) {
+      try {
+        await context.close();
+      } catch {
+        // ignore
+      }
+    }
+    finalizeAttempt(attempt, context);
   }
 
   report.summary = {
     ok: failureCount === 0,
     failures: failureCount,
   };
-  finalizeDebugReport();
-  if (Object.keys(debugReport).length > 0) report.debug = debugReport;
+  if (attempt.debug) report.debug = attempt.debug;
 
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   if (failureCount > 0) {
     process.exitCode = 1;
   }
 }
+
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);

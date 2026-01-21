@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Tool smoke script supports HTTP transport mode with stdio fallback, plus new env overrides for transport/host/port.
 - Setup wizard output now includes guided explanations, numbered menus, masked detected values, git-path warnings, optional multi-user MCP client configuration, and ANSI color cues (disable with `NO_COLOR=1`).
 - Setup wizard now defaults to Vertex sign-in with optional API key fallback, supports saving API keys with explicit consent (masked input), and can enable repo tools with auto-detected root confirmation.
 - Setup wizard now saves API keys to key files (user or system) with explicit consent and captures fallback policy + quota project.

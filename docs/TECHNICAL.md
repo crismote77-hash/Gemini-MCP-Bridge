@@ -138,7 +138,7 @@ npm run lint
 
 ## Tool Smoke
 
-`scripts/tool-smoke.mjs` runs a live MCP client against the stdio server and exercises all tools, resources, and prompts.
+`scripts/tool-smoke.mjs` runs a live MCP client against the server (stdio by default, with optional HTTP fallback) and exercises all tools, resources, and prompts.
 
 Common env overrides:
 
@@ -146,6 +146,8 @@ Common env overrides:
 - `TOOL_SMOKE_DEBUG=1` to enable server debug logging.
 - `TOOL_SMOKE_TRACE=1` to trace client steps and include a tail of server stderr in the JSON report.
 - `TOOL_SMOKE_CAPTURE_STDERR=1` to include the stderr tail without trace messages.
+- `TOOL_SMOKE_TRANSPORT=auto|stdio|http` to select transport (auto tries stdio first and falls back to HTTP on connect failure).
+- `TOOL_SMOKE_HTTP_HOST=127.0.0.1` and `TOOL_SMOKE_HTTP_PORT=...` to control the HTTP server when using HTTP mode (port defaults to a free ephemeral port).
 - `TOOL_SMOKE_IMAGE_URL=...` or `TOOL_SMOKE_IMAGE_BASE64=...` (with `TOOL_SMOKE_IMAGE_MIME`) to override the default image.
 - `GEMINI_MCP_TRACE_STARTUP=1` to log stdio startup state (stdin flags, end/close events) for diagnosing early disconnects.
 - `GEMINI_MCP_EXIT_ON_STDIN=0` to suppress auto-exit on stdin end during debugging (not recommended outside diagnostics).

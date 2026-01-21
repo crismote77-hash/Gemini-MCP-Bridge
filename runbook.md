@@ -227,3 +227,7 @@ Start using `npm run runbook:note -- "..."` to append entries.
 
 - Added stdio startup diagnostics/exit override + keepalive; updated TECHNICAL/CHANGELOG/STATUS; ran npm run build; committed and pushed.
 
+## 2026-01-21T21:15:21Z
+
+- Add HTTP fallback to tool-smoke + env options; docs updated; verification: GEMINI_MCP_AUTH_FALLBACK=auto TOOL_SMOKE_TRANSPORT=auto TOOL_SMOKE_TRACE=1 node scripts/tool-smoke.mjs (failed: stdio connection closed; HTTP listen EPERM 127.0.0.1); next: confirm environment allows HTTP binding
+
