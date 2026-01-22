@@ -72,6 +72,7 @@ Discoverability:
 
 - `gemini_code_review` and `gemini_code_fix` read local files on the server using MCP roots as the allowlist when `filesystem.mode=repo`.
 - `gemini_code_fix` returns a unified diff by default; auto-apply requires `filesystem.allowWrite=true`.
+- MCP roots are provided by the client (explicit roots config or client auto-roots/workspace roots). If no roots are sent, repo tools are blocked.
 
 ### Streaming
 
@@ -196,3 +197,20 @@ Files:
 
 - Workflow: `.github/workflows/gemini-api-radar.yml`
 - Script: `scripts/gemini-api-radar.mjs` (writes `.radar_cache/` which is gitignored)
+
+## Error Logging
+
+A centralized error logging system captures detailed error information (including stack traces and redacted context) to local files.
+
+Configuration:
+
+- `GEMINI_MCP_ERROR_LOGGING`: Log level (`off`, `errors`, `debug`, `full`). Default: `off`.
+- `GEMINI_MCP_LOG_DIR`: Directory to store logs. Default varies by OS (Linux: `~/.local/state/gemini-mcp-bridge/logs`, macOS: `~/Library/Logs/gemini-mcp-bridge`).
+- `GEMINI_MCP_LOG_MAX_SIZE`: Max size per log file in MB. Default: 10.
+- `GEMINI_MCP_LOG_RETENTION`: Days to keep logs. Default: 14.
+
+Features:
+
+- **Rotation**: Logs are rotated daily or when they exceed the size limit.
+- **Redaction**: Sensitive data (API keys, tokens) is redacted from messages and tool arguments.
+- **JSONL Format**: Logs are stored in JSONL format for easy parsing.
