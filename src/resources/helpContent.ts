@@ -39,6 +39,12 @@ export const HELP_USAGE = `# Gemini MCP Bridge Help
 - When the budget is reached and approval is set to prompt, run: gemini-mcp-bridge --approve-budget (adds another 200,000 tokens for today by default).
 - Control approval behavior with GEMINI_MCP_BUDGET_APPROVAL_POLICY=auto|prompt|never.
 
+## Error Logging
+- Enable error logging with GEMINI_MCP_ERROR_LOGGING=errors|debug|full (default: off).
+- Logs are stored in a platform-specific directory (Linux: ~/.local/state/gemini-mcp-bridge/logs).
+- Logs are rotated daily (or when >10MB) and redacted for privacy.
+- Customize with GEMINI_MCP_LOG_DIR, GEMINI_MCP_LOG_MAX_SIZE (MB), GEMINI_MCP_LOG_RETENTION (days).
+
 ## Discoverability
 - Read gemini://capabilities for server features.
 - Read gemini://models for configured defaults.

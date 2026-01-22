@@ -10,6 +10,14 @@ Local MCP server that exposes Gemini models to AI CLIs via MCP.
 4. Configure your CLI to call `gemini-mcp-bridge`
 5. Use `gemini_generate_text` in your CLI
 
+If you do not have permission to install globally, install to a user prefix and
+point your MCP client at the full command path:
+
+```
+npm install -g gemini-mcp-bridge --prefix ~/.npm-global
+# Then set command = "$HOME/.npm-global/bin/gemini-mcp-bridge" in your MCP client config.
+```
+
 Manual auth (advanced):
 - Subscription/OAuth (Gemini CLI-style): use Vertex backend (`gcloud auth application-default login` + `GEMINI_MCP_BACKEND=vertex` + `GEMINI_MCP_VERTEX_PROJECT=...` + `GEMINI_MCP_VERTEX_LOCATION=...`)
 - API key: save to `~/.gemini-mcp-bridge/api-key` (or `/etc/gemini-mcp-bridge/api-key` for shared use), or set `GEMINI_API_KEY=...` / `GOOGLE_API_KEY=...` (Developer backend)
@@ -36,6 +44,7 @@ npm run setup
 - Discoverability resources and built-in help
 - Rate limits and daily token budgets (optional shared Redis store)
 - Budget approvals via `gemini-mcp-bridge --approve-budget`
+- Centralized error logging with rotation, retention, and redaction
 
 ## Documentation
 
