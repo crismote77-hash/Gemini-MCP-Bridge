@@ -1,5 +1,6 @@
 import type { BridgeConfig } from "../config.js";
 import type { Logger } from "../logger.js";
+import type { ErrorLogger } from "../services/errorLogger.js";
 import { resolveGeminiAuth } from "../auth/resolveAuth.js";
 import { GeminiClient } from "../services/geminiClient.js";
 import { RateLimiter } from "../limits/rateLimiter.js";
@@ -22,6 +23,7 @@ export type ToolDependencies = {
   logger: Logger;
   rateLimiter: RateLimiter;
   dailyBudget: DailyTokenBudget;
+  errorLogger?: ErrorLogger;
 };
 
 export type ToolResult = {
@@ -222,6 +224,14 @@ export async function withToolErrorHandling<T>(
     deps.logger.error(`Error in ${toolName}`, {
       error: error instanceof Error ? error.message : String(error),
     });
+
+    if (deps.errorLogger) {
+      deps.errorLogger.logError({
+        toolName,
+        error,
+      });
+    }
+
     const { message } = formatToolError(error);
     return { isError: true, content: [textBlock(message)] };
   }

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadConfig } from "./config.js";
 import { createStderrLogger } from "./logger.js";
+import { createErrorLogger, setMcpVersion } from "./services/errorLogger.js";
 import { RateLimiter } from "./limits/rateLimiter.js";
 import { DailyTokenBudget } from "./limits/dailyTokenBudget.js";
 import { resolveGeminiAuth } from "./auth/resolveAuth.js";
@@ -484,6 +485,19 @@ async function main(): Promise<void> {
   const httpHost = cmd.httpHost ?? config.transport.http.host;
   const httpPort = cmd.httpPort ?? config.transport.http.port;
   const logger = createStderrLogger({ debugEnabled: config.logging.debug });
+
+  const errorLogger = createErrorLogger(
+    {
+      errorLogging: config.logging.errorLogging,
+      directory: config.logging.directory,
+      maxFileSizeMb: config.logging.maxFileSizeMb,
+      retentionDays: config.logging.retentionDays,
+    },
+    logger,
+  );
+  setMcpVersion(pkg.version);
+  errorLogger.initialize();
+
   const traceStartup = process.env.GEMINI_MCP_TRACE_STARTUP === "1";
   const exitOnStdin = process.env.GEMINI_MCP_EXIT_ON_STDIN !== "0";
 
@@ -505,7 +519,13 @@ async function main(): Promise<void> {
     approvalPath: config.limits.budgetApprovalPath,
     incrementTokens: config.limits.budgetIncrementTokens,
   });
-  const sharedDeps = { config, logger, rateLimiter, dailyBudget };
+  const sharedDeps = {
+    config,
+    logger,
+    rateLimiter,
+    dailyBudget,
+    errorLogger,
+  };
 
   let closeServer: (() => Promise<void>) | null = null;
   let keepAliveTimer: NodeJS.Timeout | null = null;

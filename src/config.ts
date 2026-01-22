@@ -8,6 +8,7 @@ const authModeSchema = z.enum(["apiKey", "oauth", "auto"]);
 const authFallbackSchema = z.enum(["auto", "prompt", "never"]);
 const backendSchema = z.enum(["developer", "vertex"]);
 const filesystemModeSchema = z.enum(["off", "repo", "system"]);
+const errorLoggingLevelSchema = z.enum(["off", "errors", "debug", "full"]);
 
 const configSchema = z
   .object({
@@ -167,6 +168,10 @@ const configSchema = z
     logging: z
       .object({
         debug: z.boolean().default(false),
+        errorLogging: errorLoggingLevelSchema.default("off"),
+        directory: z.string().optional(),
+        maxFileSizeMb: z.number().int().positive().default(10),
+        retentionDays: z.number().int().positive().default(14),
       })
       .default({}),
     transport: z
@@ -427,6 +432,32 @@ export function loadConfig(
     merged.logging = {
       ...(merged.logging as object),
       debug: parseBooleanEnv(env.GEMINI_MCP_DEBUG),
+    };
+  if (env.GEMINI_MCP_ERROR_LOGGING)
+    merged.logging = {
+      ...(merged.logging as object),
+      errorLogging: env.GEMINI_MCP_ERROR_LOGGING,
+    };
+  if (env.GEMINI_MCP_LOG_DIR)
+    merged.logging = {
+      ...(merged.logging as object),
+      directory: env.GEMINI_MCP_LOG_DIR,
+    };
+  if (env.GEMINI_MCP_LOG_MAX_SIZE)
+    merged.logging = {
+      ...(merged.logging as object),
+      maxFileSizeMb: parseIntEnv(
+        env.GEMINI_MCP_LOG_MAX_SIZE,
+        "GEMINI_MCP_LOG_MAX_SIZE",
+      ),
+    };
+  if (env.GEMINI_MCP_LOG_RETENTION)
+    merged.logging = {
+      ...(merged.logging as object),
+      retentionDays: parseIntEnv(
+        env.GEMINI_MCP_LOG_RETENTION,
+        "GEMINI_MCP_LOG_RETENTION",
+      ),
     };
   if (env.GEMINI_MCP_TRANSPORT)
     merged.transport = {

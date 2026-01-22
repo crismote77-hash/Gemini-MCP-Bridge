@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { BridgeConfig } from "./config.js";
 import type { Logger } from "./logger.js";
+import type { ErrorLogger } from "./services/errorLogger.js";
 import { RateLimiter } from "./limits/rateLimiter.js";
 import { DailyTokenBudget } from "./limits/dailyTokenBudget.js";
 import { registerTools } from "./tools/index.js";
@@ -14,6 +15,7 @@ export type SharedDependencies = {
   logger: Logger;
   rateLimiter: RateLimiter;
   dailyBudget: DailyTokenBudget;
+  errorLogger?: ErrorLogger;
 };
 
 export type ServerDependencies = SharedDependencies & {
