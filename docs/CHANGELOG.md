@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Vertex quota project routing via `vertex.quotaProject` / `GEMINI_MCP_VERTEX_QUOTA_PROJECT` (adds `x-goog-user-project` header).
 - Budget approval prompts and `gemini-mcp-bridge --approve-budget` for incremental daily budget increases.
 - Diagnostic startup tracing envs: `GEMINI_MCP_TRACE_STARTUP` and `GEMINI_MCP_EXIT_ON_STDIN`.
+- Centralized error logging system (`ErrorLogger`) with daily rotation, retention, and redaction. Enabled via `GEMINI_MCP_ERROR_LOGGING`.
 
 ### Changed
 
@@ -68,6 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactored `countTokens` and `listModels` tools to use shared helper utilities
 - `gemini_list_models` supports curated filtering and falls back to curated metadata on API failure
 - `gemini_generate_text` supports `strictJson` (optional JSON validation) and `includeGroundingMetadata` (best-effort grounding metadata extraction).
+- Docs now clarify user-prefix global installs and auto-roots/workspace roots guidance for Codex/Claude Code.
 
 ### Fixed
 

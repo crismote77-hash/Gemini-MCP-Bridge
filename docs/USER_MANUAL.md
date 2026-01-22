@@ -11,6 +11,9 @@ Expose Gemini model capabilities to AI CLIs via MCP. This runs locally but requi
 1. Install:
    - From npm: `npm install -g gemini-mcp-bridge`
    - From a local clone: `npm install` + `npm run build` + `npm install -g .` (or `npm install -g /path/to/geminiMCPbridge`)
+   - No sudo? Install to a user prefix and point your MCP client at the full path:
+     - `npm install -g gemini-mcp-bridge --prefix ~/.npm-global`
+     - Use `command = "$HOME/.npm-global/bin/gemini-mcp-bridge"` in your client config.
 2. Run guided setup: `gemini-mcp-bridge --setup`
 3. Run: `gemini-mcp-bridge --stdio`
 4. Add to your CLI config and restart
@@ -144,14 +147,36 @@ You can also set `GEMINI_MCP_VERTEX_QUOTA_PROJECT` (or `vertex.quotaProject` in 
 
 MCP servers run as child processes of your CLI. Make sure any auth/backend env vars (or `~/.gemini-mcp-bridge/config.json`) are available in the environment where your CLI is launched.
 The MCP server name (e.g., `gemini-bridge`) is arbitrary; pick any label and use it consistently in your client config.
-For repo tools, add a `roots` entry pointing at a single repo/workspace root (file URI).
+For repo tools, configure a single root (or enable auto-roots/workspace roots in your client).
+
+If you installed with a custom prefix (e.g., `~/.npm-global`), use the full path to the binary in `command`.
 
 **OpenAI Codex CLI** (`~/.codex/config.toml`):
 ```toml
 [mcp_servers."gemini-bridge"]
 command = "gemini-mcp-bridge"
 args = ["--stdio"]
-roots = [{ uri = "file:///path/to/your-repo" }]
+# Optional: set an explicit root for repo tools.
+# Omit this to rely on auto-roots/workspace roots if your Codex build supports them.
+# roots = [{ uri = "file:///path/to/your-repo" }]
+```
+
+**Claude Code** (`~/.claude.json`):
+```json
+{
+  "projects": {
+    "/path/to/your-repo": {
+      "mcpContextUris": ["file:///path/to/your-repo"],
+      "mcpServers": {
+        "gemini-bridge": {
+          "type": "stdio",
+          "command": "gemini-mcp-bridge",
+          "args": ["--stdio"]
+        }
+      }
+    }
+  }
+}
 ```
 
 **Claude Desktop** (`~/.config/Claude/claude_desktop_config.json`):
@@ -185,8 +210,8 @@ roots = [{ uri = "file:///path/to/your-repo" }]
 Repo-scoped filesystem tools (`gemini_code_review` / `gemini_code_fix`) require MCP roots from your client. The bridge does not assume the current working directory; the client decides what it is willing to share.
 
 Recommended setup:
-- Configure a single root pointing at your repo/workspace.
-- If your client supports auto-roots or workspace roots, enable it so the root follows the active project.
+- Configure a single root pointing at your repo/workspace (roots/mcpContextUris).
+- If your client supports auto-roots or workspace roots, enable it so the root follows the active project and omit explicit roots in the config.
 - Keep roots narrow; auto-roots can over-share in multi-repo or home-directory contexts. Only enable for trusted servers.
 - If multiple roots are configured, the bridge currently expects a single root. Use separate server entries per project.
 - Some clients accept a shorthand string array (e.g., `["file:///path/to/repo"]`); the object form is MCP spec.
@@ -198,7 +223,7 @@ Example (client-specific field names vary):
 
 Changing roots:
 - Update your MCP client config (same file as the server entry) and set a single repo/workspace root.
-- If your client supports auto-roots/workspace roots, enable it and switch projects in the client UI to change roots.
+- If your client supports auto-roots/workspace roots, enable it and switch projects in the client UI to change roots (leave roots/mcpContextUris empty).
 - From this repo, you can also run `node scripts/configure-mcp-users.mjs --user <name> --root-git`, `--root-cwd`, or `--root-path /path/to/repo`.
 - Restart the client after editing config files.
 
@@ -326,6 +351,10 @@ Transport/logging:
 - `GEMINI_MCP_HTTP_HOST`
 - `GEMINI_MCP_HTTP_PORT`
 - `GEMINI_MCP_DEBUG`
+- `GEMINI_MCP_ERROR_LOGGING` (off|errors|debug|full, default: off)
+- `GEMINI_MCP_LOG_DIR` (log directory path)
+- `GEMINI_MCP_LOG_MAX_SIZE` (max size per log file in MB, default: 10)
+- `GEMINI_MCP_LOG_RETENTION` (days to keep logs, default: 14)
 
 Cost tracking:
 - `GEMINI_MCP_ENABLE_COST_ESTIMATES` (enable cost estimation in usage stats)
