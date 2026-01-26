@@ -231,3 +231,35 @@ Start using `npm run runbook:note -- "..."` to append entries.
 
 - Add HTTP fallback to tool-smoke + env options; docs updated; verification: GEMINI_MCP_AUTH_FALLBACK=auto TOOL_SMOKE_TRANSPORT=auto TOOL_SMOKE_TRACE=1 node scripts/tool-smoke.mjs (failed: stdio connection closed; HTTP listen EPERM 127.0.0.1); next: confirm environment allows HTTP binding
 
+## 2026-01-21T21:24:22Z
+
+- Re-ran tool-smoke over HTTP (127.0.0.1 bind, escalated) and stdio via PTY; verification: tool-smoke JSON outputs OK, HTTP shutdown logged RangeError; next: investigate stack overflow on HTTP shutdown if needed
+
+## 2026-01-21T21:33:27Z
+
+- Traced HTTP transport close recursion (SDK close -> onclose -> server.close -> transport.close); added scripts/http-close-repro.mjs and verified it reproduces RangeError; verification: HTTP_CLOSE_CAPTURE_STDERR=1 HTTP_CLOSE_LIST_TOOLS=1 node scripts/http-close-repro.mjs
+
+## 2026-01-21T21:47:21Z
+
+- Installed gemini-mcp-bridge to user prefix (~/.npm-global) since sudo not available; updated MCP client configs for user crismote to use /home/crismote/.npm-global/bin/gemini-mcp-bridge and set auth fallback auto in ~/.gemini-mcp-bridge/config.json plus Codex/Claude Code env; verification: npm install -g /home/crismote/geminiMCPbridge --prefix /home/crismote/.npm-global; node scripts/configure-mcp-users.mjs --user crismote --command /home/crismote/.npm-global/bin/gemini-mcp-bridge
+
+## 2026-01-21T21:53:13Z
+
+- Updated Claude Code per-project config for all git repos under /home/crismote (gemini-bridge server + auth fallback auto; set mcpContextUris if missing); verification: find /home/crismote ... -name .git -print | node -e '...update ~/.claude.json'
+
+## 2026-01-21T21:55:28Z
+
+- Logged Codex CLI tool verification: gemini_* and llm_* OK; code_review/code_fix blocked without MCP roots; list_models filter enum; analyze_image OK with 10x10 PNG
+
+## 2026-01-21T21:58:57Z
+
+- Enabled auto-roots for Codex + Claude Code by clearing explicit roots (removed gemini-bridge roots from ~/.codex/config.toml and cleared mcpContextUris in ~/.claude.json); verification: file edits
+
+## 2026-01-21T22:12:24Z
+
+- Updated documentation (README/USER_MANUAL/TECHNICAL/CHANGELOG) with user-prefix install guidance and auto-roots/workspace roots notes for Codex/Claude Code; verification: doc edits
+
+## 2026-01-26T11:24:16Z
+
+- Clarify Gemini API radar artifact naming (radar-report/report.json) and MCP server label behavior in docs; verified: npm run build, npm test; next: push to GitHub
+

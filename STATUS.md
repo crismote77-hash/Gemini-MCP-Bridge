@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated (UTC): 2026-01-21T21:14:30Z
+Last updated (UTC): 2026-01-26T11:22:54Z
 
 ## In Progress
 
@@ -34,6 +34,7 @@ Last updated (UTC): 2026-01-21T21:14:30Z
 - Improve `gemini_analyze_image` error messages (surface safe underlying errors like image fetch failures).
 - Retry `gemini_list_models` against alternate Vertex endpoints on 404 before falling back to curated metadata.
 - Add daily GitHub Actions “radar” to detect Gemini API model/capability changes and auto-open a GitHub issue.
+- Clarify Gemini API radar report artifact naming and MCP server label behavior in docs.
 - Add streaming + structured JSON tools (plus provider-agnostic `llm_*` aliases)
 - Add batch token/embedding tools
 - Add conversation management tools and resources
@@ -66,9 +67,29 @@ Last updated (UTC): 2026-01-21T21:14:30Z
 - Document tool-smoke env overrides and trace/capture in TECHNICAL.md.
 - Investigate stdio connect failures: stdin ends immediately after resume (trace shows readableEnded true); disabling stdin shutdown yields request timeouts. Likely stdin EOF in non-interactive env.
 - Add HTTP transport/fallback to tool-smoke with new transport/env options; document in TECHNICAL/CHANGELOG.
+- Re-run tool-smoke over HTTP on 127.0.0.1 with escalated permissions (connect ok; server shutdown logged stack overflow errors).
+- Re-run tool-smoke in stdio mode from a PTY session (connect ok; shutdown signaled stdin_end).
+- Trace HTTP shutdown recursion path (SDK close -> onclose -> server.close -> transport.close loop) with file/line references.
+- Add HTTP shutdown repro harness (`scripts/http-close-repro.mjs`) and verify it reproduces the stack overflow.
+- Install gemini-mcp-bridge (user-global prefix) and update MCP client configs; set auth fallback auto in global config and per-project env.
+- Update Claude Code config for all git repos under /home/crismote (per-project gemini-bridge config + mcpContextUris).
+- Enable auto-roots for Codex and Claude Code by clearing explicit root config entries.
+- Update documentation (README/USER_MANUAL/TECHNICAL/CHANGELOG) for auto-roots guidance and user-prefix installs.
 
 ## Verification Snapshot
 
-Last verified (UTC): 2026-01-21T21:14:30Z
+Last verified (UTC): 2026-01-26T11:23:55Z
 
-- GEMINI_MCP_AUTH_FALLBACK=auto TOOL_SMOKE_TRANSPORT=auto TOOL_SMOKE_TRACE=1 node scripts/tool-smoke.mjs (failed: stdio connection closed; HTTP listen EPERM on 127.0.0.1)
+- npm run build
+- npm test
+- TOOL_SMOKE_TRANSPORT=http TOOL_SMOKE_HTTP_HOST=127.0.0.1 node scripts/tool-smoke.mjs (escalated; ok; server logged RangeError on shutdown, SSE abort)
+- script -q -c "TOOL_SMOKE_TRANSPORT=stdio node scripts/tool-smoke.mjs" /dev/null (escalated PTY; ok; server logged stdin_end shutdown)
+- HTTP_CLOSE_CAPTURE_STDERR=1 HTTP_CLOSE_LIST_TOOLS=1 node scripts/http-close-repro.mjs (escalated; ok; reproduces RangeError on shutdown)
+- npm install -g /home/crismote/geminiMCPbridge --prefix /home/crismote/.npm-global
+- node scripts/configure-mcp-users.mjs --user crismote --command /home/crismote/.npm-global/bin/gemini-mcp-bridge
+- node - <<'NODE' ... (updated ~/.gemini-mcp-bridge/config.json, ~/.codex/config.toml, ~/.claude.json for auth fallback)
+- find /home/crismote ... -name .git -print | node -e "...update ~/.claude.json per repo..."
+- Codex CLI tool verification: gemini_* and llm_* tools OK; code_review/code_fix blocked due to missing MCP roots; image requires >=10x10 PNG; list_models filter is enum (all|thinking|vision|grounding|json_mode).
+- Updated /home/crismote/.codex/config.toml (removed gemini-bridge roots entry)
+- Updated /home/crismote/.claude.json (cleared mcpContextUris for all projects)
+- Docs updated: README.md, docs/USER_MANUAL.md, docs/TECHNICAL.md, docs/CHANGELOG.md

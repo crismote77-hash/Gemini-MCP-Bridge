@@ -186,7 +186,7 @@ Developer API model list (`/v1beta/models`) and diffs:
 
 When a meaningful change is detected (and a previous baseline exists), it opens
 a GitHub issue labeled `gemini-api-radar` with a short summary and a link to the
-workflow run (which uploads `radar-report.json` as an artifact).
+workflow run (which uploads a `radar-report` artifact containing `report.json`).
 
 Enable it:
 

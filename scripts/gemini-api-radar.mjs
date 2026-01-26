@@ -201,7 +201,9 @@ function buildIssueMarkdown({ timestamp, apiBaseUrl, diff }) {
   lines.push(`Gemini API radar detected changes in \`${apiBaseUrl}/models\`.`);
   lines.push("");
   lines.push(`- Detected at: \`${timestamp}\``);
-  if (runUrl) lines.push(`- Workflow run: ${runUrl} (artifact: \`radar-report.json\`)`);
+  if (runUrl) {
+    lines.push(`- Workflow run: ${runUrl} (artifact: \`radar-report\`, file: \`report.json\`)`);
+  }
   lines.push("");
   lines.push("## Summary");
   lines.push("");
@@ -364,4 +366,3 @@ main().catch((error) => {
   process.stderr.write(`error: ${msg}\n`);
   process.exit(1);
 });
-

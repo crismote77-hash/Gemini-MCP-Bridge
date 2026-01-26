@@ -151,6 +151,8 @@ For repo tools, configure a single root (or enable auto-roots/workspace roots in
 
 If you installed with a custom prefix (e.g., `~/.npm-global`), use the full path to the binary in `command`.
 
+If you see multiple entries like `gemini` and `gemini-bridge`, they are usually just two config labels pointing at the same `gemini-mcp-bridge` command. To confirm what you’re running, check `which gemini-mcp-bridge` and `gemini-mcp-bridge --version`.
+
 **OpenAI Codex CLI** (`~/.codex/config.toml`):
 ```toml
 [mcp_servers."gemini-bridge"]
@@ -412,3 +414,5 @@ To enable it:
 
 1. Add a repo secret `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) in GitHub settings.
 2. Ensure GitHub Actions are enabled (workflow: “Gemini API radar”).
+3. (Optional) Run the workflow once manually (Actions → “Gemini API radar” → “Run workflow”) to create the baseline.
+4. Download the `radar-report` artifact from the run summary and open `report.json`. If no changes were detected, the `diff` lists will be empty (`[]`) and `shouldOpenIssue` will be `false` (expected).
