@@ -200,8 +200,7 @@ args = ["--stdio"]
   "mcpServers": {
     "gemini-bridge": {
       "command": "gemini-mcp-bridge",
-      "args": ["--stdio"],
-      "roots": [{ "uri": "file:///path/to/your-repo" }]
+      "args": ["--stdio"]
     }
   }
 }
@@ -269,6 +268,42 @@ Changing roots:
 ---
 
 ## Configuration
+
+### Configuring Root Folder (CI / Agents / Manual)
+
+While standard MCP clients (like Claude Desktop) usually handle "roots" automatically, AI agents, CI environments, or some manual configurations might fail to send the project root, causing `No MCP roots available` errors when using filesystem tools.
+
+To fix this, explicitly set the `GEMINI_MCP_FS_ROOT` environment variable in your client configuration to point to the project's absolute path.
+
+**Gemini CLI (`~/.gemini/settings.json`):**
+```json
+{
+  "mcpServers": {
+    "gemini-bridge": {
+      "command": "gemini-mcp-bridge",
+      "args": ["--stdio"],
+      "env": {
+        "GEMINI_MCP_FS_ROOT": "/absolute/path/to/your/project"
+      }
+    }
+  }
+}
+```
+
+**Claude Desktop (`claude_desktop_config.json`):**
+```json
+{
+  "mcpServers": {
+    "gemini-bridge": {
+      "command": "gemini-mcp-bridge",
+      "args": ["--stdio"],
+      "env": {
+        "GEMINI_MCP_FS_ROOT": "/absolute/path/to/your/project"
+      }
+    }
+  }
+}
+```
 
 ### Config file
 

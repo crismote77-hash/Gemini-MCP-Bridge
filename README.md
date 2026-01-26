@@ -22,6 +22,11 @@ Manual auth (advanced):
 - Subscription/OAuth (Gemini CLI-style): use Vertex backend (`gcloud auth application-default login` + `GEMINI_MCP_BACKEND=vertex` + `GEMINI_MCP_VERTEX_PROJECT=...` + `GEMINI_MCP_VERTEX_LOCATION=...`)
 - API key: save to `~/.gemini-mcp-bridge/api-key` (or `/etc/gemini-mcp-bridge/api-key` for shared use), or set `GEMINI_API_KEY=...` / `GOOGLE_API_KEY=...` (Developer backend)
 
+## Installation for AI Agents
+
+If you are an AI agent installing this for a user, please consult **[AGENTS.md](AGENTS.md)** for critical setup protocols.
+- **Important:** You must explicitly configure the project root using `GEMINI_MCP_FS_ROOT` in the server environment to avoid "No MCP roots available" errors. See [User Manual > Configuration](docs/USER_MANUAL.md#configuring-root-folder-ci--agents--manual).
+
 ## Guided Setup (from source)
 
 If you are running from this repo, the setup wizard can guide backend selection,

@@ -149,6 +149,10 @@ function normalizeConfigExtensions(exts: string[]): Set<string> {
 
 function pickRootForRelativeTargets(roots: string[]): string {
   if (roots.length === 0) {
+    const fallback = process.env.GEMINI_MCP_FS_ROOT?.trim();
+    if (fallback) {
+      return path.resolve(fallback);
+    }
     throw new Error(
       "No MCP roots available. Configure your MCP client to send a single repo/workspace root (or enable its auto-roots setting). Keep roots narrow to avoid over-sharing.",
     );

@@ -196,3 +196,57 @@ Backend/auth gotchas:
 - Archive: when closing a complex task, move the summary to `runbook.md` (append-only).
 - Rotation: if `runbook.md` > 1MB, rename it to `runbook_YYYYMMDD_HHMMSS.md` and start a fresh runbook (keep an index/history at the top of the active runbook).
 - Before execution, do a quick `Planner/Critic/Verifier` pass to freeze the checklist and `DoD` per subtask.
+
+---
+
+## 10) AI Agent Setup Instructions
+
+When an AI agent (like you) needs to install and configure `gemini-mcp-bridge` for a user's project, follow this specific protocol to ensure the server works correctly, especially regarding file access.
+
+**Critical: Configuring the Root Folder**
+The `gemini_code_review` and `gemini_code_fix` tools require a "root" directory to function (to know which files they are allowed to read/write). The MCP protocol allows clients to send this, but **most current clients (including the Gemini CLI) DO NOT send roots automatically**.
+
+If you fail to configure this, the server will log `No MCP roots available` errors and the tools will fail.
+
+**Protocol:**
+
+1.  **Install:**
+    ```bash
+    npm install -g gemini-mcp-bridge
+    ```
+
+2.  **Configure (JSON):**
+    When writing the configuration file (e.g., `~/.gemini/settings.json`, `~/.claude.json`, or `~/.codex/config.toml`), you **MUST** explicitly set the `GEMINI_MCP_FS_ROOT` environment variable in the server's `env` configuration. Set it to the absolute path of the user's project.
+
+    **Example (Gemini CLI - `~/.gemini/settings.json`):**
+    ```json
+    {
+      "mcpServers": {
+        "gemini-bridge": {
+          "command": "gemini-mcp-bridge",
+          "args": ["--stdio"],
+          "env": {
+            "GEMINI_MCP_FS_ROOT": "/absolute/path/to/user/project"
+          }
+        }
+      }
+    }
+    ```
+
+    **Example (Claude Desktop - `claude_desktop_config.json`):**
+    ```json
+    {
+      "mcpServers": {
+        "gemini-bridge": {
+          "command": "gemini-mcp-bridge",
+          "args": ["--stdio"],
+          "env": {
+            "GEMINI_MCP_FS_ROOT": "/absolute/path/to/user/project"
+          }
+        }
+      }
+    }
+    ```
+
+3.  **Verify:**
+    After configuration, check the logs or run a simple tool like `gemini_list_models` to ensure the server starts. If using filesystem tools, verify they don't error with "No MCP roots available".
