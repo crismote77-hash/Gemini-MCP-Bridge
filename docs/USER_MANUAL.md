@@ -331,7 +331,7 @@ General:
 - `GEMINI_MCP_API_KEY` (direct API key override)
 - `GEMINI_MCP_API_KEY_FILE_PATHS` (comma-separated key file paths)
 - `GEMINI_MCP_API_BASE_URL` (custom Gemini API base URL)
-- `GEMINI_MCP_TIMEOUT_MS` (request timeout in ms, default: 30000)
+- `GEMINI_MCP_TIMEOUT_MS` (request timeout in ms, default: 120000)
 
 Generation defaults:
 - `GEMINI_MCP_MODEL` (default model)

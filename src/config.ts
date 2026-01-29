@@ -45,7 +45,7 @@ const configSchema = z
       })
       .default({}),
     model: z.string().default("gemini-2.5-flash"),
-    timeoutMs: z.number().int().positive().default(30000),
+    timeoutMs: z.number().int().positive().default(120000),
     generation: z
       .object({
         temperature: z.number().min(0).max(2).default(0.7),
