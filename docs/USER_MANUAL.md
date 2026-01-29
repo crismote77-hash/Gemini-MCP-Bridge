@@ -341,7 +341,7 @@ Generation defaults:
 - `GEMINI_MCP_MAX_OUTPUT_TOKENS`
 
 Limits:
-- `GEMINI_MCP_MAX_TOKENS` (hard cap for maxTokens per request, default: 8192)
+- `GEMINI_MCP_MAX_TOKENS` (hard cap for maxTokens per request, default: 65536)
 - `GEMINI_MCP_MAX_INPUT_CHARS` (includes prompt + system instruction + conversation history)
 - `GEMINI_MCP_MAX_REQUESTS_PER_MINUTE`
 - `GEMINI_MCP_DAILY_TOKEN_LIMIT`

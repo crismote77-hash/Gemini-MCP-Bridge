@@ -35,6 +35,35 @@ export type CuratedModel = {
 };
 
 export const CURATED_GEMINI_MODELS: Record<string, CuratedModel> = {
+  "gemini-3-pro": {
+    name: "gemini-3-pro",
+    description:
+      "Most capable Gemini model with 1M context window and 65K output tokens.",
+    features: [
+      "thinking",
+      "vision",
+      "grounding",
+      "json_mode",
+      "system_instructions",
+      "function_calling",
+    ],
+    contextWindow: 1000000,
+    thinking: "supported",
+  },
+  "gemini-3-flash": {
+    name: "gemini-3-flash",
+    description: "Fast Gemini 3 model optimized for speed and efficiency.",
+    features: [
+      "thinking",
+      "vision",
+      "grounding",
+      "json_mode",
+      "system_instructions",
+      "function_calling",
+    ],
+    contextWindow: 1000000,
+    thinking: "supported",
+  },
   "gemini-2.5-pro": {
     name: "gemini-2.5-pro",
     description: "High-accuracy Gemini model optimized for complex reasoning.",
@@ -64,28 +93,6 @@ export const CURATED_GEMINI_MODELS: Record<string, CuratedModel> = {
   "gemini-2.5-flash-lite": {
     name: "gemini-2.5-flash-lite",
     description: "Lightweight Gemini model tuned for speed and cost.",
-    features: [
-      "vision",
-      "grounding",
-      "json_mode",
-      "system_instructions",
-      "function_calling",
-    ],
-  },
-  "gemini-2.0-flash": {
-    name: "gemini-2.0-flash",
-    description: "Balanced Gemini model for everyday multimodal workloads.",
-    features: [
-      "vision",
-      "grounding",
-      "json_mode",
-      "system_instructions",
-      "function_calling",
-    ],
-  },
-  "gemini-1.5-pro": {
-    name: "gemini-1.5-pro",
-    description: "Stable Gemini model with strong general-purpose performance.",
     features: [
       "vision",
       "grounding",

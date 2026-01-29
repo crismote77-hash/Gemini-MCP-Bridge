@@ -40,7 +40,7 @@ Last updated (UTC): 2026-01-26T11:22:54Z
 - Add conversation management tools and resources
 - Add model capabilities resources and moderation tool
 - Fix JSON mode/schema handling for `jsonSchema`/`strictJson` requests (including schema wrapper unwrapping and clearer schema-related errors).
-- Raise default `maxTokensPerRequest` cap to 8192 (override via `GEMINI_MCP_MAX_TOKENS` / config).
+- Raise default `maxTokensPerRequest` cap to 65536 (override via `GEMINI_MCP_MAX_TOKENS` / config).
 - Advertise tool limits/usage via MCP tool schemas (maxTokens caps + prompt hints).
 - Add opt-in filesystem access (repo-scoped via MCP roots; optional system mode) and compound tools for code review + diff fixes (with optional auto-apply).
 - Audit docs/codebase for inconsistencies/missing info; align help/resources/docs with filesystem tools + capabilities notes.

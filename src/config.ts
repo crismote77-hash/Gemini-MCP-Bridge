@@ -44,11 +44,11 @@ const configSchema = z
         apiBaseUrl: z.string().optional(),
       })
       .default({}),
-    model: z.string().default("gemini-2.5-flash"),
+    model: z.string().default("gemini-3-pro"),
     timeoutMs: z.number().int().positive().default(120000),
     generation: z
       .object({
-        temperature: z.number().min(0).max(2).default(0.7),
+        temperature: z.number().min(0).max(2).default(1.0),
         topK: z.number().int().positive().default(40),
         topP: z.number().min(0).max(1).default(0.95),
         maxOutputTokens: z.number().int().positive().default(2048),
@@ -56,7 +56,7 @@ const configSchema = z
       .default({}),
     limits: z
       .object({
-        maxTokensPerRequest: z.number().int().positive().default(8192),
+        maxTokensPerRequest: z.number().int().positive().default(65536),
         maxInputChars: z.number().int().positive().default(10000),
         maxRequestsPerMinute: z.number().int().positive().default(30),
         maxTokensPerDay: z.number().int().positive().default(200000),

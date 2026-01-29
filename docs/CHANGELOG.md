@@ -53,7 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Setup wizard now defaults to Vertex sign-in with optional API key fallback, supports saving API keys with explicit consent (masked input), and can enable repo tools with auto-detected root confirmation.
 - Setup wizard now saves API keys to key files (user or system) with explicit consent and captures fallback policy + quota project.
 - MCP server now reports its name as `gemini-bridge` in discovery/handshake output.
-- Default `limits.maxTokensPerRequest` increased to 8192 (override with `GEMINI_MCP_MAX_TOKENS` / config file).
+- Default model changed to `gemini-3-pro` with 1M context window and 65K output tokens.
+- Default temperature changed to 1.0 (recommended for Gemini 3 reasoning).
+- Default `limits.maxTokensPerRequest` increased to 65536 to match Gemini 3 model limits (override with `GEMINI_MCP_MAX_TOKENS` / config file).
 - Tool input schemas now advertise maxTokens caps and prompt-structure hints (helps MCP clients/LLMs avoid invalid requests).
 - `gemini://capabilities` now advertises filesystem mode and the new compound review/fix tools when enabled.
 - User-facing docs/help now include client-specific root config examples, how to change roots, and setup/config scripts for auto-setting roots.

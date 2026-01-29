@@ -21,9 +21,9 @@ describe("loadConfig", () => {
     expect(config.apiBaseUrl).toBe(
       "https://generativelanguage.googleapis.com/v1beta",
     );
-    expect(config.model).toBe("gemini-2.5-flash");
-    expect(config.timeoutMs).toBe(30000);
-    expect(config.generation.temperature).toBe(0.7);
+    expect(config.model).toBe("gemini-3-pro");
+    expect(config.timeoutMs).toBe(120000);
+    expect(config.generation.temperature).toBe(1.0);
     expect(config.auth.mode).toBe("auto");
     expect(config.auth.oauthScopes).toEqual([
       "https://www.googleapis.com/auth/generative-language",
